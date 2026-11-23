@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.2</title>
+<title>ファスティング信号 v0.3</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -42,7 +42,8 @@
   .ringwrap svg{transform:rotate(-90deg)}
   .ringcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
   .nowinfo{flex:1;min-width:0}
-  .phase{font-size:19px;font-weight:800}
+  .phase{font-size:16px;font-weight:800;white-space:nowrap}
+  .window b{white-space:nowrap}
   .remain{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
   .next{font-size:11px;color:var(--sub)}
   .window{font-size:14px;margin-top:6px;line-height:1.7}
@@ -223,6 +224,14 @@
 <!-- ============ SETTINGS ============ -->
 <section id="v-set" class="hidden">
   <div class="card">
+    <h2>食事スタイル</h2>
+    <select id="sDiet">
+      <option value="keto">🥑 ケトン重視（糖質 1日30〜50g以下）</option>
+      <option value="normal">🍚 通常（主食あり）</option>
+    </select>
+    <p class="sub" id="dietNote"></p>
+  </div>
+  <div class="card">
     <h2>段階</h2>
     <select id="sStage">
       <option value="1">第1段階：ファスティング12時間（食事12時間）</option>
@@ -262,7 +271,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.2</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.3</p>
 </section>
 </main>
 
@@ -312,7 +321,7 @@
 
   // ---------- storage ----------
   const defaults = () => ({
-    settings:{stage:1, weekdayEnd:'20:00', holidayEnd:'18:00', notify:false, safetyAck:false, stageOfferSnooze:null},
+    settings:{stage:1, weekdayEnd:'20:00', holidayEnd:'18:00', notify:false, safetyAck:false, stageOfferSnooze:null, diet:'keto'},
     days:{}
   });
   let S;
@@ -324,6 +333,8 @@
     const d = defaults();
     S.settings = Object.assign(d.settings, S.settings || {});
     S.days = S.days || {};
+    const m = S.settings.menus;  // v0.2 の定番メニュー（スタイル区別なし）は「通常」として引き継ぐ
+    if (m && Object.values(m).some(Array.isArray)) S.settings.menus = {normal:m};
   }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
@@ -387,7 +398,8 @@
     $('window').innerHTML = `今日の食事 <b>${fromMin(w.start)}–${fromMin(w.end)}</b><br>`
       + `<span class="chip" style="margin-left:0">${w.holiday ? '休日' : '平日'}</span>`
       + (w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`)
-      + (d.train ? '<span class="chip">💪 筋トレ日</span>' : '');
+      + (d.train ? '<span class="chip">💪 筋トレ日</span>' : '')
+      + (diet() === 'keto' ? '<span class="chip">🥑 ケトン</span>' : '');
     $('btnHoliday').classList.toggle('on', w.holiday);
     $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱い';
     $('btnAdjust').classList.toggle('on', w.adjust);
@@ -415,6 +427,29 @@
   }
 
   // ================= 食べるもの・1日の流れ =================
+  // ---- 食事スタイル：keto（ケトン重視・糖質1日30〜50g以下）/ normal（通常） ----
+  const KETO_MENUS = {
+    first: ['卵2個のオムレツ＋味噌汁','サラダチキン＋ゆで卵＋サラダ（オリーブオイル）','納豆＋卵焼き＋豆腐とわかめの味噌汁','鮭の塩焼き＋ほうれん草のおひたし＋味噌汁','ツナとアボカドのサラダ＋ゆで卵'],
+    lunch: ['焼き魚定食（ごはん抜き・小鉢追加）','豚の塩焼き定食（ごはん抜き・キャベツ大盛り）','刺身定食（ごはん抜き）','コンビニ：サラダチキン＋ゆで卵＋ブロッコリーサラダ','ステーキ（付け合わせのポテト・コーンなし）'],
+    dinner:['鶏ももの塩焼き＋ブロッコリー＋味噌汁','鮭のバターソテー＋きのこ＋サラダ','豚しゃぶ＋葉物サラダ（ポン酢）','鍋（肉・豆腐・きのこ・葉物、〆なし）','牛ステーキ＋ほうれん草のバターソテー'],
+    snack: ['素焼きナッツひとつかみ','チーズ','ゆで卵','アボカド半分','無糖プロテイン'],
+    drink: ['水','白湯','緑茶・麦茶','ブラックコーヒー','無糖の炭酸水'],
+  };
+  const KETO_NG = ['ごはん・パン・麺','芋・かぼちゃ・とうもろこし','果物・甘い物','砂糖入りのたれ・ケチャップ','衣の多い揚げ物'];
+  const PRINCIPLES = {
+    normal:{
+      fast:'飲み物だけで過ごします。水分はこまめに、たっぷりと。カロリーのある飲み物は避けます。',
+      first:'空腹の胃にやさしく。温かい汁物＋タンパク質から始め、揚げ物・大盛り・甘い物からは始めない。',
+      lunch:'主食・主菜・副菜がそろう「定食型」を選べばOK。迷ったら魚か鶏の定食。',
+      dinner:'タンパク質のおかず＋野菜が中心。ごはんは普通盛りまで。食事終了の30分前までに食べ終える。',
+      snack:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。'},
+    keto:{
+      fast:'飲み物だけで過ごします。水分はたっぷり。だるさ・頭痛が出たら、水に塩をひとつまみ入れて塩分も補給。',
+      first:'卵・肉・魚・豆腐＋野菜で、糖質ゼロに近い組み合わせに。ごはん・パン・果物は入れない。',
+      lunch:'外食は「ごはん抜き・おかず多め」で注文。丼・麺・パン・カレーは避ける。',
+      dinner:'タンパク質＋葉物・きのこ＋油（オリーブオイル・バター）で満腹に。〆の主食はなし。',
+      snack:'ナッツ・チーズ・卵など糖質の少ないものだけ。甘い物・果物・せんべいは避ける。'},
+  };
   const DEFAULT_MENUS = {
     first: ['味噌汁＋ゆで卵＋おにぎり','ヨーグルト＋バナナ＋ゆで卵','納豆ごはん＋味噌汁','サラダチキン＋野菜スープ＋おにぎり','豆腐とわかめの味噌汁＋鮭おにぎり'],
     lunch: ['焼き魚定食','生姜焼き定食（ごはん普通盛り）','そば＋温泉卵＋小鉢','鶏むね肉のサラダボウル＋おにぎり','幕の内弁当＋味噌汁'],
@@ -430,7 +465,10 @@
     dinner:{label:'夕食', principle:'タンパク質のおかず＋野菜が中心。ごはんは普通盛りまで。食事終了の30分前までに食べ終える。'},
     snack: {label:'間食', principle:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。'},
   };
-  const menus = () => Object.assign({}, DEFAULT_MENUS, S.settings.menus || {});
+  const diet = () => S.settings.diet === 'normal' ? 'normal' : 'keto';
+  const baseMenus = () => diet() === 'keto' ? KETO_MENUS : DEFAULT_MENUS;
+  const menus = () => Object.assign({}, baseMenus(), (S.settings.menus || {})[diet()] || {});
+  const principle = cat => PRINCIPLES[diet()][cat];
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   // 食事時間から1日の流れを組み立てる
@@ -465,7 +503,10 @@
     return list[seed % list.length];
   }
   function trainTip(d, cat){
-    return d.train && ['first','lunch','dinner'].includes(cat) ? '💪 筋トレ日：タンパク質のおかず（卵・肉・魚・豆腐）を1品追加' : '';
+    if (!(d.train && ['first','lunch','dinner'].includes(cat))) return '';
+    return diet() === 'keto'
+      ? '💪 筋トレ日：肉・魚・卵を1品追加。切り替え直後の2週間は力が落ちやすいので重量は控えめに'
+      : '💪 筋トレ日：タンパク質のおかず（卵・肉・魚・豆腐）を1品追加';
   }
 
   // ---- 次にやること ----
@@ -477,7 +518,7 @@
     const foodBox = (slot, label) => {
       const f = suggest(slot.cat), tip = trainTip(d, slot.cat);
       return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
-        <div class="tip">${CATS[slot.cat].principle}</div>${tip ? `<div class="tip">${tip}</div>` : ''}</div>`};
+        <div class="tip">${principle(slot.cat)}</div>${tip ? `<div class="tip">${tip}</div>` : ''}</div>`};
     };
     const drinks = `<div class="pills">${menus().drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
 
@@ -553,12 +594,14 @@
     $('guideTabs').innerHTML = Object.entries(CATS).map(([k,v]) =>
       `<button data-g="${k}" class="${k === cat ? 'on' : ''}">${v.label}</button>`).join('');
     const M = menus();
-    let h = `<p class="principle">${CATS[cat].principle}</p>`;
+    let h = `<p class="principle">${principle(cat)}</p>`;
+    if (diet() === 'keto') h = `<p class="principle" style="color:var(--green)">🥑 ケトン重視：糖質は1日30〜50g以下（おにぎり1個 ≒ 40g）</p>` + h;
     if (cat === 'fast'){
       h += `<div class="sub" style="margin-top:10px">🙆 飲んでOK</div><div class="pills">${M.drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`
         +  `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${DRINK_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
     } else {
       h += `<div class="sub" style="margin-top:10px">定番メニュー</div><div class="pills">${(M[cat] || []).map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
+      if (diet() === 'keto') h += `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${KETO_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
       if (cat !== 'snack') h += `<p class="sub" style="margin-bottom:0">💪 筋トレ日はタンパク質のおかずを1品追加</p>`;
     }
     $('guide').innerHTML = h;
@@ -639,6 +682,10 @@
   // ---------- render: settings ----------
   function renderSet(){
     $('sStage').value = S.settings.stage;
+    $('sDiet').value = diet();
+    $('dietNote').textContent = diet() === 'keto'
+      ? 'おすすめメニューから主食・果物を外します。切り替えから数日〜2週間はだるさ・頭痛が出やすいので、水分と塩分を多めに。糖尿病・血圧の薬を飲んでいる場合は先に医師に相談してください。'
+      : 'ごはんなどの主食を含む定食型のメニューをおすすめします。';
     $('sWeekday').value = S.settings.weekdayEnd;
     $('sHoliday').value = S.settings.holidayEnd;
     const win = (24 - FAST_H[S.settings.stage]) * 60;
@@ -688,10 +735,11 @@
   $('menuEdit').onchange = e => {
     const k = e.target.dataset.m; if (!k) return;
     const list = e.target.value.split('\n').map(s => s.trim()).filter(Boolean);
-    S.settings.menus = Object.assign({}, S.settings.menus, {[k]: list.length ? list : DEFAULT_MENUS[k]});
+    const all = S.settings.menus || {}; all[diet()] = Object.assign({}, all[diet()], {[k]: list.length ? list : baseMenus()[k]});
+    S.settings.menus = all;
     save(); toast('メニューを保存しました'); renderHome();
   };
-  $('btnMenuReset').onclick = () => { delete S.settings.menus; save(); renderAll(); toast('初期のメニューに戻しました'); };
+  $('btnMenuReset').onclick = () => { if (S.settings.menus) delete S.settings.menus[diet()]; save(); renderAll(); toast('初期のメニューに戻しました'); };
   $('btnWater').onclick = () => { const d = day(todayKey()); d.water = (d.water||0)+1; save(); toast('💧 水分を記録しました'); renderHome(); };
   document.querySelectorAll('#conds button').forEach(b => b.onclick = () => {
     const d = day(todayKey()); d.cond = d.cond === b.dataset.c ? undefined : b.dataset.c; save(); renderAll();
@@ -735,6 +783,7 @@
   };
 
   // 設定
+  $('sDiet').onchange = e => { S.settings.diet = e.target.value; save(); toast(e.target.value === 'keto' ? 'ケトン重視にしました' : '通常にしました'); renderAll(); };
   $('sStage').onchange = e => { S.settings.stage = Number(e.target.value); save(); renderAll(); };
   $('sWeekday').onchange = e => { if (e.target.value){ S.settings.weekdayEnd = e.target.value; save(); renderAll(); } };
   $('sHoliday').onchange = e => { if (e.target.value){ S.settings.holidayEnd = e.target.value; save(); renderAll(); } };
