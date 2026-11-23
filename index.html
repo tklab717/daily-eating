@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ファスティング">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>ファスティング信号 v0.1</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
+    --green:#22c55e; --yellow:#eab308; --blue:#3b82f6; --red:#f87171;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;}
+  body{padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom));}
+  main{max-width:480px;margin:0 auto;padding:16px}
+  h2{font-size:15px;color:var(--sub);font-weight:600;margin:0 0 10px}
+  .card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .sub{color:var(--sub);font-size:13px}
+  button{font:inherit;color:var(--text);background:#273449;border:1px solid var(--line);
+    border-radius:12px;padding:12px 14px;cursor:pointer}
+  button:active{transform:scale(.97)}
+  button.on{border-color:var(--green);background:#14532d}
+  button.primary{background:var(--green);border-color:var(--green);color:#052e16;font-weight:700}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .grid3 button,.grid2 button{padding:14px 6px}
+  input,select{font:inherit;color:var(--text);background:#0b1222;border:1px solid var(--line);
+    border-radius:10px;padding:10px;width:100%}
+  label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+
+  /* ring */
+  .ringwrap{position:relative;width:240px;height:240px;margin:6px auto 4px}
+  .ringwrap svg{transform:rotate(-90deg)}
+  .ringcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .phase{font-size:22px;font-weight:800}
+  .remain{font-size:40px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums}
+  .next{font-size:13px;color:var(--sub)}
+  .window{text-align:center;font-size:15px;margin-top:6px}
+  .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
+  .chip.adj{background:#713f12;color:#fde68a}
+
+  .banner{border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:14px}
+  .banner.up{background:#14532d}
+  .banner.down{background:#4c1d24}
+  .banner .row{margin-top:8px}
+
+  .log li{font-size:13px;color:var(--sub);list-style:none;padding:2px 0}
+  .log{padding:0;margin:8px 0 0}
+
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+  .cal .dow{font-size:11px;color:var(--sub)}
+  .cal .cell{aspect-ratio:1;border-radius:10px;background:#0b1222;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-size:11px;cursor:pointer;border:1px solid transparent}
+  .cal .cell.today{border-color:var(--green)}
+  .cal .cell .st{font-size:17px;line-height:1.1}
+  .cal .empty{background:transparent;cursor:default}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+  .stats b{display:block;font-size:24px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td{padding:6px 4px;border-bottom:1px solid var(--line)}
+
+  nav{position:fixed;left:0;right:0;bottom:0;background:#0b1222;border-top:1px solid var(--line);
+    display:flex;padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;border:none;border-radius:0;background:transparent;padding:12px 0;font-size:12px;color:var(--sub)}
+  nav button.act{color:var(--green)}
+  nav button span{display:block;font-size:20px}
+  .hidden{display:none!important}
+
+  dialog{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:16px;
+    max-width:420px;width:calc(100% - 32px);padding:18px}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin:8px 0;color:var(--text)}
+  .check input{width:auto;margin-top:3px}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#334155;
+    padding:10px 16px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<main>
+
+<!-- ============ HOME ============ -->
+<section id="v-home">
+  <div id="banner"></div>
+
+  <div class="card">
+    <div class="ringwrap">
+      <svg width="240" height="240" viewBox="0 0 240 240">
+        <circle cx="120" cy="120" r="104" fill="none" stroke="#273449" stroke-width="16"/>
+        <circle id="ring" cx="120" cy="120" r="104" fill="none" stroke="var(--blue)" stroke-width="16"
+                stroke-linecap="round" stroke-dasharray="653.45" stroke-dashoffset="653.45"/>
+      </svg>
+      <div class="ringcenter">
+        <div class="phase" id="phase">—</div>
+        <div class="remain" id="remain">--:--</div>
+        <div class="next" id="next"></div>
+      </div>
+    </div>
+    <div class="window" id="window"></div>
+    <div class="row" style="justify-content:center;margin-top:10px">
+      <button id="btnHoliday">休日扱い</button>
+      <button id="btnAdjust">🔄 調整日にする</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1タップ記録</h2>
+    <div class="grid2">
+      <button id="btnMeal">🍽 食べた</button>
+      <button id="btnWater">💧 水分 +1 <span id="water" class="sub"></span></button>
+    </div>
+    <label>体調</label>
+    <div class="grid3" id="conds">
+      <button data-c="◎">◎ 良い</button>
+      <button data-c="○">○ 普通</button>
+      <button data-c="△">△ いまいち</button>
+    </div>
+    <label>体重（kg・任意）</label>
+    <div class="row" style="flex-wrap:nowrap">
+      <input id="weight" type="number" inputmode="decimal" step="0.1" placeholder="例 70.5">
+      <button id="btnWeight" style="white-space:nowrap">保存</button>
+    </div>
+    <ul class="log" id="log"></ul>
+  </div>
+
+  <div class="card">
+    <h2>今日のふりかえり</h2>
+    <div class="grid3" id="statusBtns">
+      <button data-s="done">✅ 守れた</button>
+      <button data-s="adjust">🔄 調整日</button>
+      <button data-s="miss">・ 今日はできず</button>
+    </div>
+    <p class="sub" id="statusMsg" style="margin:10px 0 0"></p>
+  </div>
+</section>
+
+<!-- ============ RECORD ============ -->
+<section id="v-rec" class="hidden">
+  <div class="card">
+    <div class="stats">
+      <div><b id="stStreak">0</b><span class="sub">連続日数</span></div>
+      <div><b id="stWeek">0/7</b><span class="sub">直近7日</span></div>
+      <div><b id="stStage">1</b><span class="sub">段階</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <button id="calPrev">‹</button><b id="calTitle"></b><button id="calNext">›</button>
+    </div>
+    <div class="cal" id="cal"></div>
+    <p class="sub" style="margin:10px 0 0">日付をタップすると ✅ → 🔄 → ・ → 未記録 の順に切り替わります</p>
+  </div>
+  <div class="card">
+    <h2>体重と体調（直近14日）</h2>
+    <table id="wtable"></table>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section id="v-set" class="hidden">
+  <div class="card">
+    <h2>段階</h2>
+    <select id="sStage">
+      <option value="1">第1段階：ファスティング12時間（食事12時間）</option>
+      <option value="2">第2段階：ファスティング14時間（食事10時間）</option>
+      <option value="3">第3段階：ファスティング16時間（食事8時間）</option>
+    </select>
+    <p class="sub">2週続けて週5日守れたら、次の段階を提案します（自動では上げません）。</p>
+  </div>
+  <div class="card">
+    <h2>食事時間テンプレ（夕食を終える時刻）</h2>
+    <label>平日</label><input id="sWeekday" type="time">
+    <label>休日（土日・休日扱いの日）</label><input id="sHoliday" type="time">
+    <p class="sub" id="sPreview"></p>
+  </div>
+  <div class="card">
+    <h2>通知</h2>
+    <button id="btnNotify">通知をオンにする</button>
+    <p class="sub">食事開始30分前・終了30分前、ファスティング中の水分補給（2時間おき・8〜22時）。v0.1ではアプリを開いている間（バックグラウンド含む端末による）に通知します。</p>
+  </div>
+  <div class="card">
+    <h2>データ</h2>
+    <div class="grid2">
+      <button id="btnExport">書き出し（JSON）</button>
+      <button id="btnImport">読み込み</button>
+    </div>
+    <input id="fileImport" type="file" accept="application/json" class="hidden">
+    <p class="sub">データはこの端末の中だけに保存されます。</p>
+  </div>
+  <div class="card">
+    <h2>安全のために</h2>
+    <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
+    <button id="btnSafety">開始時チェックをもう一度見る</button>
+  </div>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.1</p>
+</section>
+</main>
+
+<nav>
+  <button data-v="home" class="act"><span>🚦</span>ホーム</button>
+  <button data-v="rec"><span>📅</span>記録</button>
+  <button data-v="set"><span>⚙️</span>設定</button>
+</nav>
+
+<!-- 調整日 -->
+<dialog id="dlgAdjust">
+  <h3 style="margin-top:0">🔄 調整日</h3>
+  <p class="sub">外食・家族行事などの日は、今日だけ食事時間をずらせます。連続記録は途切れません。</p>
+  <label>食事開始</label><input id="aStart" type="time">
+  <label>食事終了</label><input id="aEnd" type="time">
+  <div class="row" style="margin-top:14px;justify-content:flex-end">
+    <button id="aClear">元に戻す</button>
+    <button id="aCancel">閉じる</button>
+    <button id="aSave" class="primary">保存</button>
+  </div>
+</dialog>
+
+<!-- 開始時チェック -->
+<dialog id="dlgSafety">
+  <h3 style="margin-top:0">はじめる前に</h3>
+  <p class="sub">次のいずれかに当てはまる場合は、始める前に医師に相談してください。</p>
+  <ul class="sub" style="padding-left:18px;margin:6px 0 12px;line-height:1.7">
+    <li>持病がある・薬を飲んでいる（特に糖尿病・血圧の薬など）</li>
+    <li>妊娠中・授乳中</li>
+    <li>過去に食事のことで悩んだ経験がある</li>
+    <li>18歳未満</li>
+  </ul>
+  <label class="check"><input type="checkbox" id="safeOk"> 上記を確認しました。体調を最優先にし、不調のときは無理せず食べます。</label>
+  <div class="row" style="justify-content:flex-end;margin-top:10px">
+    <button id="safeGo" class="primary" disabled>はじめる</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const KEY = 'fasting-signal-v1';
+  const FAST_H = {1:12, 2:14, 3:16};
+  const RING_LEN = 2 * Math.PI * 104;
+
+  // ---------- storage ----------
+  const defaults = () => ({
+    settings:{stage:1, weekdayEnd:'20:00', holidayEnd:'18:00', notify:false, safetyAck:false, stageOfferSnooze:null},
+    days:{}
+  });
+  let S;
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      S = raw ? JSON.parse(raw) : defaults();
+    }catch(e){ S = defaults(); }
+    const d = defaults();
+    S.settings = Object.assign(d.settings, S.settings || {});
+    S.days = S.days || {};
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+  // ---------- date helpers ----------
+  const pad = n => String(n).padStart(2,'0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const addDays = (d,n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+  const toMin = hm => { const [h,m] = hm.split(':').map(Number); return h*60+m; };
+  const fromMin = m => `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
+  const at = (d, min) => { const x = new Date(d); x.setHours(0,0,0,0); x.setMinutes(min); return x; };
+  const fmtDur = ms => { const t = Math.max(0, Math.round(ms/60000)); return `${Math.floor(t/60)}:${pad(t%60)}`; };
+  const day = key => (S.days[key] = S.days[key] || {});
+  const peek = key => S.days[key] || {};
+
+  function isHoliday(d){
+    const x = peek(ymd(d));
+    if (typeof x.holiday === 'boolean') return x.holiday;
+    const w = d.getDay(); return w === 0 || w === 6;
+  }
+  // 食事時間（分）。終了時刻から段階に応じて開始を逆算
+  function windowOf(d){
+    const x = peek(ymd(d));
+    if (x.adjust) return {start:toMin(x.adjust.start), end:toMin(x.adjust.end), adjust:true, holiday:isHoliday(d)};
+    const hol = isHoliday(d);
+    const end = toMin(hol ? S.settings.holidayEnd : S.settings.weekdayEnd);
+    const start = Math.max(0, end - (24 - FAST_H[S.settings.stage]) * 60);
+    return {start, end, adjust:false, holiday:hol};
+  }
+
+  // ---------- phase ----------
+  function phaseNow(now = new Date()){
+    const today = new Date(now); today.setHours(0,0,0,0);
+    const w = windowOf(today);
+    const s = at(today, w.start), e = at(today, w.end);
+    if (now >= s && now < e){
+      const left = e - now;
+      return {kind: left <= 30*60000 ? 'soon' : 'eat', from:s, to:e, w};
+    }
+    if (now < s){
+      const yw = windowOf(addDays(today,-1));
+      return {kind:'fast', from:at(addDays(today,-1), yw.end), to:s, w};
+    }
+    const tm = addDays(today,1), tw = windowOf(tm);
+    return {kind:'fast', from:e, to:at(tm, tw.start), w, nextW:tw};
+  }
+
+  // ---------- render: home ----------
+  const $ = id => document.getElementById(id);
+  const COLORS = {eat:'var(--green)', soon:'var(--yellow)', fast:'var(--blue)'};
+  const LABEL  = {eat:'🟢 食事OK', soon:'🟡 まもなく終了', fast:'🔵 ファスティング中'};
+
+  function renderHome(){
+    const now = new Date(), p = phaseNow(now), key = ymd(now), d = peek(key);
+    const total = p.to - p.from, done = now - p.from;
+    $('ring').style.stroke = COLORS[p.kind];
+    $('ring').style.strokeDashoffset = RING_LEN * (1 - Math.min(1, Math.max(0, done/total)));
+    $('phase').textContent = LABEL[p.kind];
+    $('remain').textContent = fmtDur(p.to - now);
+    $('next').textContent = p.kind === 'fast'
+      ? `食事開始まで（${fromMin(p.to.getHours()*60+p.to.getMinutes())}〜）`
+      : `食事終了まで（〜${fromMin(p.w.end)}）`;
+    const w = p.w;
+    $('window').innerHTML = `今日の食事時間 <b>${fromMin(w.start)}–${fromMin(w.end)}</b>`
+      + `<span class="chip">${w.holiday ? '休日' : '平日'}</span>`
+      + (w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`);
+    $('btnHoliday').classList.toggle('on', w.holiday);
+    $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱いにする';
+    $('btnAdjust').classList.toggle('on', w.adjust);
+
+    $('water').textContent = d.water ? `(${d.water})` : '';
+    document.querySelectorAll('#conds button').forEach(b => b.classList.toggle('on', b.dataset.c === d.cond));
+    document.querySelectorAll('#statusBtns button').forEach(b => b.classList.toggle('on', b.dataset.s === d.status));
+    if (d.weight && document.activeElement !== $('weight')) $('weight').value = d.weight;
+
+    const msg = {done:'おつかれさま！カレンダーにスタンプを押しました。',
+                 adjust:'調整日として記録しました。連続記録は続いています。',
+                 miss:'そんな日もあります。明日からまた普通に再開しましょう。'};
+    $('statusMsg').textContent = msg[d.status] || '夜にどれか1つをタップして1日を締めくくりましょう。';
+
+    const items = (d.meals || []).map(t => `🍽 ${t}`);
+    $('log').innerHTML = items.length ? items.map(s => `<li>${s}</li>`).join('') : '';
+    renderBanner();
+  }
+
+  // ---------- 段階の提案 ----------
+  function countIn(from, n, pred){
+    let c = 0; for (let i=0;i<n;i++){ if (pred(peek(ymd(addDays(from,-i))))) c++; } return c;
+  }
+  function renderBanner(){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const el = $('banner'); el.innerHTML = '';
+    const snooze = S.settings.stageOfferSnooze;
+    if (snooze && snooze >= ymd(today)) return;
+
+    // 体調△が3日続いたら段階を下げる提案
+    const bad3 = [0,1,2].every(i => peek(ymd(addDays(today,-i))).cond === '△');
+    if (bad3 && S.settings.stage > 1){
+      el.innerHTML = `<div class="banner down">体調「△」が3日続いています。体調を優先して、段階を1つ下げてみませんか？
+        <div class="row"><button id="bAct">第${S.settings.stage-1}段階に下げる</button><button id="bLater">今はいい</button></div></div>`;
+      $('bAct').onclick = () => { S.settings.stage--; save(); toast('段階を下げました'); renderAll(); };
+      $('bLater').onclick = snoozeOffer;
+      return;
+    }
+    if (bad3){
+      el.innerHTML = `<div class="banner down">体調「△」が3日続いています。無理せず、しっかり食べる日をつくりましょう。めまいや強い不調があるときは中止してください。</div>`;
+      return;
+    }
+    // 2週続けて週5日 ✅ → 次の段階を提案
+    const ok = x => x.status === 'done';
+    const w1 = countIn(today, 7, ok), w2 = countIn(addDays(today,-7), 7, ok);
+    if (S.settings.stage < 3 && w1 >= 5 && w2 >= 5){
+      const n = S.settings.stage + 1;
+      el.innerHTML = `<div class="banner up">🎉 2週続けて週5日守れています。第${n}段階（ファスティング${FAST_H[n]}時間）に進みますか？
+        <div class="row"><button id="bAct" class="primary">進む</button><button id="bLater">今の段階を続ける</button></div></div>`;
+      $('bAct').onclick = () => { S.settings.stage = n; save(); toast(`第${n}段階になりました`); renderAll(); };
+      $('bLater').onclick = snoozeOffer;
+    }
+  }
+  function snoozeOffer(){ S.settings.stageOfferSnooze = ymd(addDays(new Date(), 6)); save(); renderAll(); }
+
+  // ---------- render: record ----------
+  let calMonth = new Date(); calMonth.setDate(1);
+  const STAMP = {done:'✅', adjust:'🔄', miss:'・'};
+  function streak(){
+    let d = new Date(); d.setHours(0,0,0,0);
+    if (!['done','adjust'].includes(peek(ymd(d)).status)) d = addDays(d,-1); // 今日未記録なら昨日から数える
+    let c = 0;
+    while (['done','adjust'].includes(peek(ymd(d)).status)){ c++; d = addDays(d,-1); }
+    return c;
+  }
+  function renderRec(){
+    const today = new Date(); today.setHours(0,0,0,0);
+    $('stStreak').textContent = streak();
+    $('stWeek').textContent = `${countIn(today,7,x => x.status==='done'||x.status==='adjust')}/7`;
+    $('stStage').textContent = S.settings.stage;
+
+    const y = calMonth.getFullYear(), m = calMonth.getMonth();
+    $('calTitle').textContent = `${y}年${m+1}月`;
+    const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
+    let h = '日月火水木金土'.split('').map(s => `<div class="dow">${s}</div>`).join('');
+    for (let i=0;i<first;i++) h += '<div class="cell empty"></div>';
+    for (let dd=1; dd<=days; dd++){
+      const k = ymd(new Date(y,m,dd)), st = peek(k).status;
+      h += `<div class="cell${k===ymd(today)?' today':''}" data-k="${k}"><span>${dd}</span><span class="st">${STAMP[st]||''}</span></div>`;
+    }
+    $('cal').innerHTML = h;
+
+    let rows = '<tr><td class="sub">日付</td><td class="sub">体重</td><td class="sub">体調</td><td class="sub">記録</td></tr>';
+    for (let i=0;i<14;i++){
+      const d = addDays(today,-i), x = peek(ymd(d));
+      if (!x.weight && !x.cond && !x.status) continue;
+      rows += `<tr><td>${d.getMonth()+1}/${d.getDate()}</td><td>${x.weight ? x.weight+' kg' : '—'}</td><td>${x.cond||'—'}</td><td>${STAMP[x.status]||''}</td></tr>`;
+    }
+    $('wtable').innerHTML = rows;
+  }
+
+  // ---------- render: settings ----------
+  function renderSet(){
+    $('sStage').value = S.settings.stage;
+    $('sWeekday').value = S.settings.weekdayEnd;
+    $('sHoliday').value = S.settings.holidayEnd;
+    const win = (24 - FAST_H[S.settings.stage]) * 60;
+    const pv = e => `${fromMin(Math.max(0,toMin(e)-win))}–${e}`;
+    $('sPreview').textContent = `平日 ${pv(S.settings.weekdayEnd)} ／ 休日 ${pv(S.settings.holidayEnd)}`;
+    $('btnNotify').textContent = S.settings.notify ? '通知：オン（タップでオフ）' : '通知をオンにする';
+    $('btnNotify').classList.toggle('on', S.settings.notify);
+  }
+
+  function renderAll(){ renderHome(); renderRec(); renderSet(); }
+
+  // ---------- toast ----------
+  let tt;
+  function toast(s){ const t = $('toast'); t.textContent = s; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(()=>t.classList.remove('show'), 1600); }
+
+  // ---------- events ----------
+  const nowHM = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; };
+  const todayKey = () => ymd(new Date());
+
+  $('btnMeal').onclick = () => { const d = day(todayKey()); (d.meals = d.meals || []).push(nowHM()); save(); toast('食事を記録しました'); renderHome(); };
+  $('btnWater').onclick = () => { const d = day(todayKey()); d.water = (d.water||0)+1; save(); toast('💧 水分を記録しました'); renderHome(); };
+  document.querySelectorAll('#conds button').forEach(b => b.onclick = () => {
+    const d = day(todayKey()); d.cond = d.cond === b.dataset.c ? undefined : b.dataset.c; save(); renderAll();
+  });
+  $('btnWeight').onclick = () => {
+    const v = parseFloat($('weight').value);
+    if (!(v > 20 && v < 300)) { toast('数値を確認してください'); return; }
+    day(todayKey()).weight = Math.round(v*10)/10; save(); $('weight').blur(); toast('体重を保存しました'); renderAll();
+  };
+  document.querySelectorAll('#statusBtns button').forEach(b => b.onclick = () => {
+    const d = day(todayKey()); d.status = d.status === b.dataset.s ? undefined : b.dataset.s; save(); renderAll();
+  });
+  $('btnHoliday').onclick = () => {
+    const now = new Date(), d = day(ymd(now)); d.holiday = !isHoliday(now); save(); renderAll();
+  };
+
+  // 調整日
+  $('btnAdjust').onclick = () => {
+    const w = windowOf(new Date());
+    $('aStart').value = fromMin(w.start); $('aEnd').value = fromMin(w.end);
+    $('dlgAdjust').showModal();
+  };
+  $('aCancel').onclick = () => $('dlgAdjust').close();
+  $('aClear').onclick = () => { delete day(todayKey()).adjust; save(); $('dlgAdjust').close(); renderAll(); };
+  $('aSave').onclick = () => {
+    const s = $('aStart').value, e = $('aEnd').value;
+    if (!s || !e || toMin(e) <= toMin(s)) { toast('終了は開始より後にしてください'); return; }
+    const d = day(todayKey()); d.adjust = {start:s, end:e}; if (!d.status) d.status = 'adjust';
+    save(); $('dlgAdjust').close(); toast('今日を調整日にしました'); renderAll();
+  };
+
+  // カレンダー
+  $('calPrev').onclick = () => { calMonth.setMonth(calMonth.getMonth()-1); renderRec(); };
+  $('calNext').onclick = () => { calMonth.setMonth(calMonth.getMonth()+1); renderRec(); };
+  $('cal').onclick = e => {
+    const c = e.target.closest('.cell[data-k]'); if (!c) return;
+    if (c.dataset.k > todayKey()) return;
+    const order = [undefined,'done','adjust','miss'];
+    const d = day(c.dataset.k); d.status = order[(order.indexOf(d.status)+1) % order.length];
+    save(); renderAll();
+  };
+
+  // 設定
+  $('sStage').onchange = e => { S.settings.stage = Number(e.target.value); save(); renderAll(); };
+  $('sWeekday').onchange = e => { if (e.target.value){ S.settings.weekdayEnd = e.target.value; save(); renderAll(); } };
+  $('sHoliday').onchange = e => { if (e.target.value){ S.settings.holidayEnd = e.target.value; save(); renderAll(); } };
+
+  $('btnExport').onclick = () => {
+    const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `fasting-${todayKey()}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  };
+  $('btnImport').onclick = () => $('fileImport').click();
+  $('fileImport').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try{
+      const j = JSON.parse(await f.text());
+      if (!j.settings || !j.days) throw 0;
+      S = {settings:Object.assign(defaults().settings, j.settings), days:j.days};
+      save(); toast('読み込みました'); renderAll();
+    }catch(_){ toast('ファイルを読み込めませんでした'); }
+    e.target.value = '';
+  };
+
+  // 開始時チェック
+  $('safeOk').onchange = e => $('safeGo').disabled = !e.target.checked;
+  $('safeGo').onclick = () => { S.settings.safetyAck = true; save(); $('dlgSafety').close(); };
+  $('dlgSafety').addEventListener('cancel', e => { if (!S.settings.safetyAck) e.preventDefault(); });
+  $('btnSafety').onclick = () => { $('safeOk').checked = false; $('safeGo').disabled = true; $('dlgSafety').showModal(); };
+
+  // タブ
+  document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.toggle('act', x === b));
+    ['home','rec','set'].forEach(v => $('v-'+v).classList.toggle('hidden', v !== b.dataset.v));
+    renderAll(); window.scrollTo(0,0);
+  });
+
+  // ---------- 通知 ----------
+  const fired = new Set();
+  $('btnNotify').onclick = async () => {
+    if (S.settings.notify){ S.settings.notify = false; save(); renderSet(); return; }
+    if (!('Notification' in window)) { toast('この環境では通知が使えません（ホーム画面に追加して開いてください）'); return; }
+    const p = await Notification.requestPermission();
+    if (p === 'granted'){ S.settings.notify = true; save(); notify('通知をオンにしました', '食事時間の前にお知らせします'); }
+    else toast('通知が許可されませんでした');
+    renderSet();
+  };
+  async function notify(title, body){
+    try{
+      const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+      if (reg) reg.showNotification(title, {body, icon:'icon-192.png', tag:title});
+      else new Notification(title, {body, icon:'icon-192.png'});
+    }catch(e){}
+  }
+  function checkNotify(){
+    if (!S.settings.notify || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const now = new Date(), today = new Date(now); today.setHours(0,0,0,0);
+    const w = windowOf(today), k = ymd(today);
+    const events = [
+      {t:at(today, w.start-30), id:'s', title:'🟢 30分後に食事時間', body:`${fromMin(w.start)}から食事OKです`},
+      {t:at(today, w.end-30),   id:'e', title:'🟡 食事終了30分前', body:`${fromMin(w.end)}までに食事を終えましょう`},
+    ];
+    const p = phaseNow(now);
+    if (p.kind === 'fast' && now.getHours() >= 8 && now.getHours() <= 22 && now.getHours() % 2 === 0){
+      events.push({t:at(today, now.getHours()*60), id:'w'+now.getHours(), title:'💧 水分補給', body:'水やお茶を一杯どうぞ'});
+    }
+    for (const ev of events){
+      const key = k + ev.id;
+      if (!fired.has(key) && now >= ev.t && now - ev.t < 5*60000){ fired.add(key); notify(ev.title, ev.body); }
+    }
+  }
+
+  // ---------- start ----------
+  load();
+  renderAll();
+  if (!S.settings.safetyAck) $('dlgSafety').showModal();
+  setInterval(() => { renderHome(); checkNotify(); }, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
