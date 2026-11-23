@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.1</title>
+<title>ファスティング信号 v0.2</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -32,18 +32,54 @@
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
   .grid3 button,.grid2 button{padding:14px 6px}
-  input,select{font:inherit;color:var(--text);background:#0b1222;border:1px solid var(--line);
+  input,select,textarea{font:inherit;color:var(--text);background:#0b1222;border:1px solid var(--line);
     border-radius:10px;padding:10px;width:100%}
   label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
 
-  /* ring */
-  .ringwrap{position:relative;width:240px;height:240px;margin:6px auto 4px}
+  /* now */
+  .now{display:flex;gap:14px;align-items:center}
+  .ringwrap{position:relative;width:150px;height:150px;flex:none}
   .ringwrap svg{transform:rotate(-90deg)}
   .ringcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-  .phase{font-size:22px;font-weight:800}
-  .remain{font-size:40px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums}
-  .next{font-size:13px;color:var(--sub)}
-  .window{text-align:center;font-size:15px;margin-top:6px}
+  .nowinfo{flex:1;min-width:0}
+  .phase{font-size:19px;font-weight:800}
+  .remain{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+  .next{font-size:11px;color:var(--sub)}
+  .window{font-size:14px;margin-top:6px;line-height:1.7}
+  button.sm{padding:8px 10px;font-size:13px}
+
+  /* 次にやること */
+  .todo{border:2px solid var(--green);background:linear-gradient(160deg,#1e293b,#14301f)}
+  .todo .lead{font-size:12px;color:var(--green);font-weight:700;letter-spacing:1px}
+  .todo .title{font-size:20px;font-weight:800;margin:4px 0 6px;line-height:1.4}
+  .todo .body{font-size:14px;color:#cbd5e1;line-height:1.6}
+  .food{background:#0b1222;border-radius:12px;padding:12px;margin-top:10px}
+  .food .fname{font-size:17px;font-weight:700;margin-top:2px}
+  .food .tip{font-size:13px;color:var(--sub);margin-top:4px}
+  .todo .row{margin-top:10px}
+  .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .pill{font-size:13px;padding:5px 10px;border-radius:99px;background:#0b1222;border:1px solid var(--line)}
+  .pill.ng{color:var(--red);border-color:#7f1d1d}
+
+  /* timeline */
+  .tl{list-style:none;margin:0;padding:0 0 0 6px}
+  .tl li{position:relative;padding:0 0 14px 26px;border-left:2px solid var(--line);cursor:default}
+  .tl li:last-child{border-left-color:transparent;padding-bottom:0}
+  .tl li::before{content:"";position:absolute;left:-7px;top:3px;width:12px;height:12px;border-radius:50%;background:var(--line)}
+  .tl li.past{opacity:.55}
+  .tl li.done::before{background:var(--green)}
+  .tl li.cur::before{background:var(--yellow);box-shadow:0 0 0 4px rgba(234,179,8,.25)}
+  .tl li.meal{cursor:pointer}
+  .tl .t{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .tl .n{font-size:15px;font-weight:700}
+  .tl .d{font-size:13px;color:var(--sub);margin-top:2px}
+  .tl .here{font-size:11px;background:var(--yellow);color:#422006;border-radius:99px;padding:1px 7px;margin-left:6px;font-weight:700}
+
+  /* guide tabs */
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px}
+  .tabs button{flex:none;padding:7px 11px;font-size:13px;border-radius:99px}
+  .tabs button.on{background:#14532d;border-color:var(--green)}
+  .principle{font-size:14px;line-height:1.6;margin:4px 0 0}
   .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
   .chip.adj{background:#713f12;color:#fde68a}
 
@@ -92,31 +128,50 @@
 <section id="v-home">
   <div id="banner"></div>
 
-  <div class="card">
+  <!-- いまの状態 -->
+  <div class="card now">
     <div class="ringwrap">
-      <svg width="240" height="240" viewBox="0 0 240 240">
-        <circle cx="120" cy="120" r="104" fill="none" stroke="#273449" stroke-width="16"/>
-        <circle id="ring" cx="120" cy="120" r="104" fill="none" stroke="var(--blue)" stroke-width="16"
+      <svg width="150" height="150" viewBox="0 0 240 240">
+        <circle cx="120" cy="120" r="104" fill="none" stroke="#273449" stroke-width="18"/>
+        <circle id="ring" cx="120" cy="120" r="104" fill="none" stroke="var(--blue)" stroke-width="18"
                 stroke-linecap="round" stroke-dasharray="653.45" stroke-dashoffset="653.45"/>
       </svg>
       <div class="ringcenter">
-        <div class="phase" id="phase">—</div>
         <div class="remain" id="remain">--:--</div>
         <div class="next" id="next"></div>
       </div>
     </div>
-    <div class="window" id="window"></div>
-    <div class="row" style="justify-content:center;margin-top:10px">
-      <button id="btnHoliday">休日扱い</button>
-      <button id="btnAdjust">🔄 調整日にする</button>
+    <div class="nowinfo">
+      <div class="phase" id="phase">—</div>
+      <div class="window" id="window"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="sm" id="btnHoliday">休日扱い</button>
+        <button class="sm" id="btnAdjust">🔄 調整日</button>
+      </div>
     </div>
+  </div>
+
+  <!-- 次にやること -->
+  <div class="card todo" id="todo"></div>
+
+  <!-- 今日の流れ -->
+  <div class="card">
+    <h2>今日の流れ <span class="sub" style="font-weight:400">（食事はタップで記録）</span></h2>
+    <ol class="tl" id="timeline"></ol>
+  </div>
+
+  <!-- 食べるものガイド -->
+  <div class="card">
+    <h2>食べるものガイド</h2>
+    <div class="tabs" id="guideTabs"></div>
+    <div id="guide"></div>
   </div>
 
   <div class="card">
     <h2>1タップ記録</h2>
     <div class="grid2">
-      <button id="btnMeal">🍽 食べた</button>
       <button id="btnWater">💧 水分 +1 <span id="water" class="sub"></span></button>
+      <button id="btnTrain">💪 今日は筋トレ日</button>
     </div>
     <label>体調</label>
     <div class="grid3" id="conds">
@@ -137,7 +192,7 @@
     <div class="grid3" id="statusBtns">
       <button data-s="done">✅ 守れた</button>
       <button data-s="adjust">🔄 調整日</button>
-      <button data-s="miss">・ 今日はできず</button>
+      <button data-s="miss">・ できず</button>
     </div>
     <p class="sub" id="statusMsg" style="margin:10px 0 0"></p>
   </div>
@@ -183,6 +238,12 @@
     <p class="sub" id="sPreview"></p>
   </div>
   <div class="card">
+    <h2>定番メニュー（1行に1つ）</h2>
+    <p class="sub" style="margin-top:0">「次にやること」のおすすめはここから日替わりで選ばれます。よく食べるものに書き換えてください。</p>
+    <div id="menuEdit"></div>
+    <button id="btnMenuReset" style="margin-top:10px">初期のメニューに戻す</button>
+  </div>
+  <div class="card">
     <h2>通知</h2>
     <button id="btnNotify">通知をオンにする</button>
     <p class="sub">食事開始30分前・終了30分前、ファスティング中の水分補給（2時間おき・8〜22時）。v0.1ではアプリを開いている間（バックグラウンド含む端末による）に通知します。</p>
@@ -201,7 +262,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.1</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.2</p>
 </section>
 </main>
 
@@ -321,18 +382,23 @@
     $('ring').style.strokeDashoffset = RING_LEN * (1 - Math.min(1, Math.max(0, done/total)));
     $('phase').textContent = LABEL[p.kind];
     $('remain').textContent = fmtDur(p.to - now);
-    $('next').textContent = p.kind === 'fast'
-      ? `食事開始まで（${fromMin(p.to.getHours()*60+p.to.getMinutes())}〜）`
-      : `食事終了まで（〜${fromMin(p.w.end)}）`;
+    $('next').textContent = p.kind === 'fast' ? '食事開始まで' : '食事終了まで';
     const w = p.w;
-    $('window').innerHTML = `今日の食事時間 <b>${fromMin(w.start)}–${fromMin(w.end)}</b>`
-      + `<span class="chip">${w.holiday ? '休日' : '平日'}</span>`
-      + (w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`);
+    $('window').innerHTML = `今日の食事 <b>${fromMin(w.start)}–${fromMin(w.end)}</b><br>`
+      + `<span class="chip" style="margin-left:0">${w.holiday ? '休日' : '平日'}</span>`
+      + (w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`)
+      + (d.train ? '<span class="chip">💪 筋トレ日</span>' : '');
     $('btnHoliday').classList.toggle('on', w.holiday);
-    $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱いにする';
+    $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱い';
     $('btnAdjust').classList.toggle('on', w.adjust);
 
+    renderTodo(now, p, d);
+    renderTimeline(now, d);
+    renderGuide();
+
     $('water').textContent = d.water ? `(${d.water})` : '';
+    $('btnTrain').classList.toggle('on', !!d.train);
+    $('btnTrain').textContent = d.train ? '💪 筋トレ日 ✓' : '💪 今日は筋トレ日';
     document.querySelectorAll('#conds button').forEach(b => b.classList.toggle('on', b.dataset.c === d.cond));
     document.querySelectorAll('#statusBtns button').forEach(b => b.classList.toggle('on', b.dataset.s === d.status));
     if (d.weight && document.activeElement !== $('weight')) $('weight').value = d.weight;
@@ -342,9 +408,160 @@
                  miss:'そんな日もあります。明日からまた普通に再開しましょう。'};
     $('statusMsg').textContent = msg[d.status] || '夜にどれか1つをタップして1日を締めくくりましょう。';
 
-    const items = (d.meals || []).map(t => `🍽 ${t}`);
-    $('log').innerHTML = items.length ? items.map(s => `<li>${s}</li>`).join('') : '';
+    $('log').innerHTML = (d.meals || []).map(m => typeof m === 'string'
+      ? `<li>🍽 ${m}</li>`
+      : `<li>🍽 ${m.t} ${esc(slotName(m.slot))}${m.food ? '：' + esc(m.food) : ''}</li>`).join('');
     renderBanner();
+  }
+
+  // ================= 食べるもの・1日の流れ =================
+  const DEFAULT_MENUS = {
+    first: ['味噌汁＋ゆで卵＋おにぎり','ヨーグルト＋バナナ＋ゆで卵','納豆ごはん＋味噌汁','サラダチキン＋野菜スープ＋おにぎり','豆腐とわかめの味噌汁＋鮭おにぎり'],
+    lunch: ['焼き魚定食','生姜焼き定食（ごはん普通盛り）','そば＋温泉卵＋小鉢','鶏むね肉のサラダボウル＋おにぎり','幕の内弁当＋味噌汁'],
+    dinner:['鶏むね肉のソテー＋野菜＋ごはん','鮭の塩焼き＋小鉢＋味噌汁＋ごはん','豚しゃぶサラダ＋ごはん','豆腐ハンバーグ＋温野菜','鍋（鶏・豆腐・野菜たっぷり）'],
+    snack: ['ナッツひとつかみ','無糖ヨーグルト','ゆで卵','チーズ','バナナ','プロテイン'],
+    drink: ['水','白湯','緑茶・麦茶','ブラックコーヒー','無糖の炭酸水'],
+  };
+  const DRINK_NG = ['ジュース・スポーツドリンク','加糖のコーヒー・紅茶','牛乳・ラテ','アルコール'];
+  const CATS = {
+    fast:  {label:'ファスティング中', principle:'飲み物だけで過ごします。水分はこまめに、たっぷりと。カロリーのある飲み物は避けます。'},
+    first: {label:'最初の一食', principle:'空腹の胃にやさしく。温かい汁物＋タンパク質から始め、揚げ物・大盛り・甘い物からは始めない。'},
+    lunch: {label:'昼食', principle:'主食・主菜・副菜がそろう「定食型」を選べばOK。迷ったら魚か鶏の定食。'},
+    dinner:{label:'夕食', principle:'タンパク質のおかず＋野菜が中心。ごはんは普通盛りまで。食事終了の30分前までに食べ終える。'},
+    snack: {label:'間食', principle:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。'},
+  };
+  const menus = () => Object.assign({}, DEFAULT_MENUS, S.settings.menus || {});
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // 食事時間から1日の流れを組み立てる
+  function slotsOf(w){
+    const s = w.start, e = w.end, L = [];
+    L.push({id:'wake', t:0, icon:'🌅', name:'起床後', cat:'fast', notime:true,
+            desc:'コップ1杯の水か白湯から。食事時間まで飲み物だけで過ごす'});
+    const firstName = s < 10*60+30 ? '朝食（最初の一食）' : s < 14*60 ? '昼食（最初の一食）' : '最初の一食';
+    L.push({id:'first', t:s, icon:'🍽', name:firstName, cat:'first', meal:true});
+    const dinnerT = Math.max(s + 120, e - 90);
+    if (s < 10*60+30 && 12*60 + 120 <= dinnerT)
+      L.push({id:'lunch', t:12*60, icon:'🍱', name:'昼食', cat:'lunch', meal:true});
+    if (e - s >= 4*60)
+      L.push({id:'dinner', t:dinnerT, icon:'🍲', name:'夕食', cat:'dinner', meal:true});
+    L.push({id:'end', t:e, icon:'🔵', name:'食事終了 → ファスティング開始', cat:'fast',
+            desc:'ここからは水・お茶だけ。歯みがきをして「食事終わり」の合図に'});
+    L.push({id:'review', t:Math.min(e + 90, 23*60 + 30), icon:'🌙', name:'今日のふりかえり', cat:'fast',
+            desc:'下の「今日のふりかえり」を1タップして1日を締めくくる'});
+    return L;
+  }
+  function slotName(id){
+    const s = slotsOf(windowOf(new Date())).find(x => x.id === id);
+    return s ? s.name.replace(/（.*）/, '') : ({first:'最初の一食',lunch:'昼食',dinner:'夕食',snack:'間食'}[id] || '');
+  }
+  const eaten = (d, id) => (d.meals || []).some(m => typeof m === 'object' && m.slot === id);
+
+  // 日替わりのおすすめ（「別の候補」で次へ）
+  const offsets = {};
+  function suggest(cat, date = new Date()){
+    const list = menus()[cat] || []; if (!list.length) return '';
+    const seed = date.getFullYear()*400 + date.getMonth()*31 + date.getDate() + (offsets[cat] || 0);
+    return list[seed % list.length];
+  }
+  function trainTip(d, cat){
+    return d.train && ['first','lunch','dinner'].includes(cat) ? '💪 筋トレ日：タンパク質のおかず（卵・肉・魚・豆腐）を1品追加' : '';
+  }
+
+  // ---- 次にやること ----
+  function renderTodo(now, p, d){
+    const nm = now.getHours()*60 + now.getMinutes();
+    const w = p.w, slots = slotsOf(w), meals = slots.filter(s => s.meal);
+    let lead = '次にやること', title = '', body = '', food = null, actions = '';
+
+    const foodBox = (slot, label) => {
+      const f = suggest(slot.cat), tip = trainTip(d, slot.cat);
+      return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
+        <div class="tip">${CATS[slot.cat].principle}</div>${tip ? `<div class="tip">${tip}</div>` : ''}</div>`};
+    };
+    const drinks = `<div class="pills">${menus().drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
+
+    if (nm < w.start){
+      const until = w.start - nm, first = meals[0];
+      if (until > 30){
+        title = '💧 飲み物だけで過ごす時間です';
+        body = `次は <b>${fromMin(w.start)}</b> の${first.name}。それまではこれを飲んでOK：${drinks}`;
+        food = foodBox(first, `${fromMin(w.start)} の${first.name}のおすすめ`);
+      } else {
+        title = `🍽 あと${until}分で${first.name}`;
+        body = 'メニューを決めておきましょう。';
+        food = foodBox(first, 'おすすめ');
+      }
+    } else if (nm < w.end){
+      const cur = [...meals].reverse().find(s => s.t <= nm) || meals[0];
+      const nextMeal = meals.find(s => s.t > nm && !eaten(d, s.id));
+      const left = w.end - nm;
+      if (!eaten(d, cur.id)){
+        title = p.kind === 'soon' ? `🟡 あと${left}分で終了。${cur.name}を今のうちに` : `🍽 今は${cur.name}の時間です`;
+        food = foodBox(cur, '今日のおすすめ');
+        actions = `<div class="row"><button class="primary" data-eat="${cur.id}" data-food="${esc(food.f)}">これを食べた</button>
+          <button data-other="${cur.cat}">別の候補</button><button data-eat="${cur.id}" data-food="">違うものを食べた</button></div>`;
+      } else if (nextMeal){
+        title = `✅ ${cur.name.replace(/（.*）/,'')}OK！ 次は ${fromMin(nextMeal.t)} の${nextMeal.name}`;
+        body = `小腹がすいたら間食OK：<b>${esc(suggest('snack'))}</b> など`;
+        food = foodBox(nextMeal, `${nextMeal.name}のおすすめ`);
+      } else {
+        title = p.kind === 'soon' ? `🟡 あと${left}分で食事終了` : '✅ 今日の食事はそろいました';
+        body = `<b>${fromMin(w.end)}</b> からファスティング開始。間食するならそれまでに：<b>${esc(suggest('snack'))}</b> など`;
+      }
+    } else {
+      const tm = addDays(now, 1), tw = windowOf(tm), tfirst = slotsOf(tw).find(s => s.meal);
+      if (!d.status){
+        title = '🌙 ファスティング開始！ 寝る前にふりかえり';
+        body = `下の「今日のふりかえり」を1タップして1日を締めくくりましょう。<br>明日は <b>${fromMin(tw.start)}</b> から${tfirst.name}。`;
+        actions = `<div class="row"><button class="primary" id="goReview">ふりかえりへ</button></div>`;
+      } else {
+        title = '🎉 今日はおしまい。ゆっくり休みましょう';
+        body = `飲み物は水・お茶だけ。明日は <b>${fromMin(tw.start)}</b> から${tfirst.name}。`;
+        food = {html:`<div class="food"><div class="sub">明日の${tfirst.name}のおすすめ</div><div class="fname">${esc(suggest('first', tm))}</div></div>`};
+      }
+    }
+    $('todo').innerHTML = `<div class="lead">${lead}</div><div class="title">${title}</div>`
+      + (body ? `<div class="body">${body}</div>` : '') + (food ? food.html : '') + actions;
+  }
+
+  // ---- 今日の流れ ----
+  function renderTimeline(now, d){
+    const nm = now.getHours()*60 + now.getMinutes(), w = windowOf(now), slots = slotsOf(w);
+    let curIdx = 0; slots.forEach((s,i) => { if (s.t <= nm) curIdx = i; });
+    $('timeline').innerHTML = slots.map((s,i) => {
+      const done = s.meal ? eaten(d, s.id) : (s.id === 'review' ? !!d.status : i < curIdx);
+      const cls = [i < curIdx ? 'past' : '', i === curIdx ? 'cur' : '', done ? 'done' : '', s.meal ? 'meal' : ''].join(' ');
+      const m = s.meal && (d.meals || []).find(x => typeof x === 'object' && x.slot === s.id);
+      const desc = s.meal
+        ? (m ? `✅ ${m.t} 記録済み${m.food ? '：' + esc(m.food) : ''}` : `おすすめ：${esc(suggest(s.cat))}`)
+        : s.desc;
+      return `<li class="${cls}" ${s.meal ? `data-slot="${s.id}"` : ''}>
+        <div class="t">${s.notime ? '朝' : fromMin(s.t)}${i === curIdx ? '<span class="here">いまここ</span>' : ''}</div>
+        <div class="n">${s.icon} ${s.name}</div><div class="d">${desc}</div></li>`;
+    }).join('');
+  }
+
+  // ---- 食べるものガイド ----
+  let guideCat = null;
+  function renderGuide(){
+    const now = new Date(), nm = now.getHours()*60 + now.getMinutes(), w = windowOf(now);
+    const slots = slotsOf(w);
+    const auto = (nm < w.start || nm >= w.end) ? 'fast'
+      : ([...slots].reverse().find(s => s.meal && s.t <= nm) || {cat:'first'}).cat;
+    const cat = guideCat || auto;
+    $('guideTabs').innerHTML = Object.entries(CATS).map(([k,v]) =>
+      `<button data-g="${k}" class="${k === cat ? 'on' : ''}">${v.label}</button>`).join('');
+    const M = menus();
+    let h = `<p class="principle">${CATS[cat].principle}</p>`;
+    if (cat === 'fast'){
+      h += `<div class="sub" style="margin-top:10px">🙆 飲んでOK</div><div class="pills">${M.drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`
+        +  `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${DRINK_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
+    } else {
+      h += `<div class="sub" style="margin-top:10px">定番メニュー</div><div class="pills">${(M[cat] || []).map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
+      if (cat !== 'snack') h += `<p class="sub" style="margin-bottom:0">💪 筋トレ日はタンパク質のおかずを1品追加</p>`;
+    }
+    $('guide').innerHTML = h;
   }
 
   // ---------- 段階の提案 ----------
@@ -429,6 +646,11 @@
     $('sPreview').textContent = `平日 ${pv(S.settings.weekdayEnd)} ／ 休日 ${pv(S.settings.holidayEnd)}`;
     $('btnNotify').textContent = S.settings.notify ? '通知：オン（タップでオフ）' : '通知をオンにする';
     $('btnNotify').classList.toggle('on', S.settings.notify);
+    if (!$('menuEdit').contains(document.activeElement)){
+      const M = menus(), names = {first:'最初の一食', lunch:'昼食', dinner:'夕食', snack:'間食', drink:'ファスティング中の飲み物'};
+      $('menuEdit').innerHTML = Object.entries(names).map(([k,n]) =>
+        `<label>${n}</label><textarea data-m="${k}" rows="${M[k].length + 1}">${esc(M[k].join('\n'))}</textarea>`).join('');
+    }
   }
 
   function renderAll(){ renderHome(); renderRec(); renderSet(); }
@@ -441,7 +663,35 @@
   const nowHM = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; };
   const todayKey = () => ymd(new Date());
 
-  $('btnMeal').onclick = () => { const d = day(todayKey()); (d.meals = d.meals || []).push(nowHM()); save(); toast('食事を記録しました'); renderHome(); };
+  function logMeal(slot, food){
+    const d = day(todayKey());
+    d.meals = (d.meals || []).filter(m => !(typeof m === 'object' && m.slot === slot));
+    d.meals.push({t:nowHM(), slot, food});
+    save(); toast('🍽 記録しました'); renderAll();
+  }
+  $('todo').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
+    else if (b.dataset.other){ offsets[b.dataset.other] = (offsets[b.dataset.other] || 0) + 1; renderHome(); }
+    else if (b.id === 'goReview') $('statusBtns').scrollIntoView({behavior:'smooth', block:'center'});
+  };
+  $('timeline').onclick = e => {
+    const li = e.target.closest('li[data-slot]'); if (!li) return;
+    const d = day(todayKey()), id = li.dataset.slot;
+    if (eaten(d, id)){ d.meals = d.meals.filter(m => !(typeof m === 'object' && m.slot === id)); save(); toast('記録を取り消しました'); renderAll(); }
+    else { const s = slotsOf(windowOf(new Date())).find(x => x.id === id); logMeal(id, suggest(s.cat)); }
+  };
+  $('guideTabs').onclick = e => { const b = e.target.closest('button[data-g]'); if (b){ guideCat = b.dataset.g; renderGuide(); } };
+  $('btnTrain').onclick = () => { const d = day(todayKey()); d.train = !d.train; save(); renderAll(); };
+
+  // 定番メニュー編集
+  $('menuEdit').onchange = e => {
+    const k = e.target.dataset.m; if (!k) return;
+    const list = e.target.value.split('\n').map(s => s.trim()).filter(Boolean);
+    S.settings.menus = Object.assign({}, S.settings.menus, {[k]: list.length ? list : DEFAULT_MENUS[k]});
+    save(); toast('メニューを保存しました'); renderHome();
+  };
+  $('btnMenuReset').onclick = () => { delete S.settings.menus; save(); renderAll(); toast('初期のメニューに戻しました'); };
   $('btnWater').onclick = () => { const d = day(todayKey()); d.water = (d.water||0)+1; save(); toast('💧 水分を記録しました'); renderHome(); };
   document.querySelectorAll('#conds button').forEach(b => b.onclick = () => {
     const d = day(todayKey()); d.cond = d.cond === b.dataset.c ? undefined : b.dataset.c; save(); renderAll();
