@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.3.1</title>
+<title>ファスティング信号 v0.4</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -81,6 +81,19 @@
   .tabs button{flex:none;padding:7px 11px;font-size:13px;border-radius:99px}
   .tabs button.on{background:#14532d;border-color:var(--green)}
   .principle{font-size:14px;line-height:1.6;margin:4px 0 0}
+  .food .nut{font-size:13px;margin-top:6px;color:#e2e8f0}
+  .food .more{margin-top:8px;padding:6px 12px;font-size:13px;border-radius:99px}
+  .pill.tap{cursor:pointer}
+  .pill.tap::after{content:" ›";color:var(--sub)}
+  .nrow{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin:8px 0 4px;gap:8px}
+  .bar{position:relative;height:8px;background:#0b1222;border-radius:99px;overflow:visible}
+  .bar i{display:block;height:100%;border-radius:99px}
+  .bar em{position:absolute;top:-3px;width:2px;height:14px;background:var(--sub)}
+  .ntiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-top:10px}
+  .ntiles div{background:#0b1222;border-radius:10px;padding:8px 2px}
+  .ntiles b{display:block;font-size:17px}
+  .ntiles span{font-size:11px;color:var(--sub)}
+  table.ing td:last-child{text-align:right;white-space:nowrap}
   .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
   .chip.adj{background:#713f12;color:#fde68a}
 
@@ -159,6 +172,12 @@
 
   <!-- 次にやること -->
   <div class="card todo" id="todo"></div>
+
+  <!-- 今日の栄養 -->
+  <div class="card">
+    <h2>今日の栄養</h2>
+    <div id="nutr"></div>
+  </div>
 
   <!-- 今日の流れ -->
   <div class="card">
@@ -277,7 +296,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.3.1</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.4</p>
 </section>
 </main>
 
@@ -286,6 +305,9 @@
   <button data-v="rec"><span>📅</span>記録</button>
   <button data-v="set"><span>⚙️</span>設定</button>
 </nav>
+
+<!-- 材料と量 -->
+<dialog id="dlgRecipe"><div id="recipeBody"></div></dialog>
 
 <!-- 調整日 -->
 <dialog id="dlgAdjust">
@@ -412,6 +434,7 @@
 
     renderTodo(now, p, d);
     renderTimeline(now, d);
+    renderNutr(d);
     renderGuide();
 
     $('water').textContent = d.water ? `(${d.water})` : '';
@@ -479,6 +502,129 @@
   const baseMenus = () => diet() === 'keto' ? KETO_MENUS : DEFAULT_MENUS;
   const menus = () => Object.assign({}, baseMenus(), (S.settings.menus || {})[diet()] || {});
   const principle = cat => PRINCIPLES[diet()][cat];
+  // ---- 材料（1人分）と栄養の目安 ----
+  // 栄養は日本食品標準成分表（八訂）をもとにした概算。n = [糖質g, タンパク質g, 脂質g, kcal]
+  const MISO = [['味噌',12,'g'],['豆腐',30,'g'],['乾燥わかめ',1,'g'],['だし',150,'ml']];
+  const RECIPES = {
+    '卵2個のオムレツ＋味噌汁':{n:[3,16,16,217],
+      ing:[['卵',2,'個'],['バター',5,'g'],['塩・こしょう',0,'少々'],...MISO],
+      how:'卵を溶いて塩・こしょうし、バターでふんわり焼く。味噌汁はだしで豆腐・わかめを温め、火を止めて味噌を溶く。'},
+    'サラダチキン＋ゆで卵＋サラダ（オリーブオイル）':{n:[3,32,19,313],
+      ing:[['サラダチキン',1,'袋（110g）'],['卵',1,'個'],['葉物野菜（レタス・ベビーリーフ）',80,'g'],['オリーブオイル',1,'大さじ'],['塩・こしょう・レモン汁',0,'少々']],
+      how:'卵は沸騰したお湯で8〜9分ゆでる。野菜にオリーブオイル・塩・レモン汁をかけ、チキンと卵をのせる。'},
+    '納豆＋卵焼き＋豆腐とわかめの味噌汁':{n:[6,23,21,310],
+      ing:[['納豆',1,'パック（45g・たれは半分）'],['卵',2,'個'],['油',1,'小さじ'],['白だし（砂糖なし）',1,'小さじ'],...MISO],
+      how:'卵に白だしを混ぜ、油をひいたフライパンで巻きながら焼く（砂糖は入れない）。納豆のたれは半分にして糖質を減らす。'},
+    '鮭の塩焼き＋ほうれん草のおひたし＋味噌汁':{n:[4,24,11,206],
+      ing:[['塩鮭',1,'切れ（80g）'],['ほうれん草',70,'g'],['しょうゆ',1,'小さじ'],['かつお節',0,'少々'],...MISO],
+      how:'鮭はグリルで7〜8分焼く。ほうれん草は1分ゆでて水にとり、しぼってしょうゆ・かつお節をかける。'},
+    'ツナとアボカドのサラダ＋ゆで卵':{n:[3,21,33,389],
+      ing:[['ツナ缶（油漬け）',1,'缶（70g）'],['アボカド',0.5,'個（70g）'],['葉物野菜',50,'g'],['卵',1,'個'],['しょうゆ',0.5,'小さじ'],['わさび',0,'少々']],
+      how:'アボカドを角切りにし、ツナ・野菜と合わせてしょうゆ・わさびで和える。ゆで卵を添える。'},
+
+    '焼き魚定食（ごはん抜き・小鉢追加）':{n:[5,31,21,335], out:true,
+      ing:[['さばの塩焼き',1,'切れ（80g）'],['冷奴',100,'g'],['ほうれん草のおひたし',70,'g'],['味噌汁',1,'杯']],
+      how:'外食では「ごはん抜きで、小鉢（冷奴・おひたし）を追加」と注文。'},
+    '豚の塩焼き定食（ごはん抜き・キャベツ大盛り）':{n:[6,28,29,396],
+      ing:[['豚ロース',120,'g'],['油',1,'小さじ'],['キャベツ（千切り）',100,'g'],['塩・こしょう',0,'少々'],...MISO],
+      how:'豚肉に塩・こしょうをして油で両面を焼く。キャベツを大盛りに添える。外食なら「ごはん抜き・キャベツ大盛り」。'},
+    '刺身定食（ごはん抜き）':{n:[6,39,17,324], out:true,
+      ing:[['刺身（まぐろ赤身・サーモンなど）',120,'g'],['冷奴',100,'g'],['しょうゆ',2,'小さじ'],['味噌汁',1,'杯']],
+      how:'外食では「ごはん抜き」と注文。しょうゆは小皿1杯程度に。'},
+    'コンビニ：サラダチキン＋ゆで卵＋ブロッコリーサラダ':{n:[4,35,13,271], out:true,
+      ing:[['サラダチキン',1,'袋（110g）'],['ゆで卵',1,'個'],['ブロッコリーサラダ',1,'パック（ドレッシングは半分）']],
+      how:'商品によって栄養が違うので、裏の「炭水化物（糖質）」を確認。ドレッシングは半分にすると糖質と脂質を抑えられる。'},
+    'ステーキ（付け合わせのポテト・コーンなし）':{n:[2,29,31,392],
+      ing:[['牛ステーキ（肩ロースなど）',150,'g'],['ブロッコリー・いんげん',80,'g'],['バター',5,'g'],['塩・こしょう',0,'少々']],
+      how:'肉は常温に戻して塩・こしょう。強火で片面2〜3分ずつ焼き、アルミホイルで包んで3分休ませる。ソースは甘いものを避け、塩・わさび・しょうゆで。'},
+
+    '鶏ももの塩焼き＋ブロッコリー＋味噌汁':{n:[4,32,24,355],
+      ing:[['鶏もも肉（皮つき）',150,'g'],['ブロッコリー',100,'g'],['塩・こしょう',0,'少々'],...MISO],
+      how:'鶏肉は皮目から中火で7〜8分焼き、裏返して4〜5分。ブロッコリーは2分ゆでる。'},
+    '鮭のバターソテー＋きのこ＋サラダ':{n:[4,25,21,298],
+      ing:[['生鮭',1,'切れ（100g）'],['バター',10,'g'],['しめじ・まいたけ',80,'g'],['葉物野菜',80,'g'],['オリーブオイル',2,'小さじ'],['しょうゆ',0.5,'小さじ']],
+      how:'鮭に塩・こしょうし、バターで両面を焼く。同じフライパンできのこを炒め、しょうゆを少し。サラダはオリーブオイルと塩で。'},
+    '豚しゃぶ＋葉物サラダ（ポン酢）':{n:[4,33,17,301],
+      ing:[['豚もも薄切り',150,'g'],['レタス・水菜',100,'g'],['ポン酢',1,'大さじ'],['いりごま',1,'小さじ']],
+      how:'沸騰直前のお湯で豚肉を1枚ずつ色が変わるまでゆで、野菜にのせてポン酢・ごまをかける。'},
+    '鍋（肉・豆腐・きのこ・葉物、〆なし）':{n:[8,35,25,395],
+      ing:[['鶏もも肉',120,'g'],['木綿豆腐',150,'g'],['きのこ',100,'g'],['白菜・春菊',200,'g'],['だし',300,'ml'],['ポン酢',1,'大さじ']],
+      how:'だしで鶏肉を5分煮てから豆腐・きのこ・野菜を入れて煮る。〆のごはん・うどんは入れない。'},
+    '牛ステーキ＋ほうれん草のバターソテー':{n:[1,29,35,420],
+      ing:[['牛ステーキ（肩ロースなど）',150,'g'],['ほうれん草',100,'g'],['バター',10,'g'],['塩・こしょう',0,'少々']],
+      how:'ステーキは強火で片面2〜3分ずつ焼いて休ませる。ほうれん草はバターでさっと炒めて塩・こしょう。'},
+
+    '素焼きナッツひとつかみ':{n:[2,4,15,165], ing:[['素焼きナッツ（アーモンド・くるみ）',25,'g（ひとつかみ）']], how:'食べすぎやすいので、小皿に1回分だけ出して食べる。'},
+    'チーズ':{n:[1,8,9,113], ing:[['プロセスチーズ',2,'個（36g）']], how:''},
+    'ゆで卵':{n:[0,6,5,71], ing:[['卵',1,'個']], how:'沸騰したお湯で8〜9分。まとめて作って冷蔵庫に置いておくと便利。'},
+    'アボカド半分':{n:[1,2,12,123], ing:[['アボカド',0.5,'個（70g）']], how:'塩・しょうゆ・わさびを少し。'},
+    '無糖プロテイン':{n:[2,22,1,110], ing:[['プロテイン（無糖・プレーン）',30,'g'],['水',200,'ml']], how:'商品によって違うので、表示の炭水化物とタンパク質を確認。'},
+  };
+  const recipe = name => RECIPES[name] || null;
+  const catOf = name => Object.keys(DEFAULT_MENUS).find(k => (menus()[k] || []).includes(name));
+  const nut = n => `糖質 <b>${n[0]}g</b>・タンパク質 <b>${n[1]}g</b>・脂質 ${n[2]}g・${n[3]}kcal`;
+  function fmtQty(q, unit, people){
+    if (!q) return unit;                       // 少々
+    const v = Math.round(q * people * 10) / 10;
+    return ['大さじ','小さじ'].includes(unit) ? `${unit}${v}` : `${v}${unit}`;
+  }
+  // 今日食べた分の合計（栄養データのあるメニューだけ）
+  function dayNutr(d){
+    const sum = [0,0,0,0]; let unknown = 0;
+    (d.meals || []).forEach(m => {
+      const r = typeof m === 'object' && recipe(m.food);
+      if (r) r.n.forEach((v,i) => sum[i] += v); else unknown++;
+    });
+    return {sum, unknown};
+  }
+  function latestWeight(){
+    const keys = Object.keys(S.days).filter(k => S.days[k].weight).sort();
+    return keys.length ? S.days[keys[keys.length-1]].weight : null;
+  }
+  function renderNutr(d){
+    const {sum, unknown} = dayNutr(d), keto = diet() === 'keto';
+    const c = sum[0], limit = 50, good = 30;
+    const cColor = !keto ? 'var(--green)' : c <= good ? 'var(--green)' : c <= limit ? 'var(--yellow)' : 'var(--red)';
+    const w = latestWeight();
+    const pLo = w ? Math.round(w*1.2) : null, pHi = w ? Math.round(w*1.6) : null;
+    const pct = (v, max) => Math.min(100, Math.round(v / max * 100));
+    let h = '';
+    if (keto) h += `<div class="nrow"><span>糖質</span><span><b style="color:${cColor}">${c}g</b> <span class="sub">／ 目安 30g（多くても50g）</span></span></div>
+      <div class="bar"><i style="width:${pct(c, limit)}%;background:${cColor}"></i><em style="left:${pct(good,limit)}%"></em></div>`;
+    else h += `<div class="nrow"><span>糖質</span><b>${c}g</b></div>`;
+    h += `<div class="nrow"><span>タンパク質</span><span><b>${sum[1]}g</b> <span class="sub">／ ${w ? `目安 ${pLo}〜${pHi}g（体重×1.2〜1.6）` : '体重を記録すると目安を表示'}</span></span></div>`;
+    if (w) h += `<div class="bar"><i style="width:${pct(sum[1], pHi)}%;background:var(--blue)"></i><em style="left:${pct(pLo,pHi)}%"></em></div>`;
+    h += `<div class="nrow"><span>脂質</span><b>${sum[2]}g</b></div><div class="nrow"><span>エネルギー</span><b>${sum[3]}kcal</b></div>`;
+    if (keto && c > limit) h += `<p class="sub" style="color:var(--red)">糖質が50gを超えました。今日はこのあと主食・甘い物を控えましょう。</p>`;
+    if (unknown) h += `<p class="sub">※ 栄養データのない記録が${unknown}件あります（自分で追加したメニュー・「違うものを食べた」など）</p>`;
+    h += `<p class="sub" style="margin-bottom:0">記録した食事の合計（成分表をもとにした概算）</p>`;
+    $('nutr').innerHTML = h;
+  }
+
+  // ---- 材料と量のダイアログ ----
+  let rPeople = 1, rName = null;
+  function openRecipe(name){ rName = name; rPeople = 1; renderRecipe(); $('dlgRecipe').showModal(); }
+  function renderRecipe(){
+    const r = recipe(rName), cat = catOf(rName);
+    let h = `<h3 style="margin:0 0 4px">${esc(rName)}</h3>`;
+    if (!r){
+      h += `<p class="sub">このメニューには材料・栄養のデータがありません（設定で自分で追加したメニューなど）。</p>`;
+    } else {
+      h += `<div class="ntiles">
+        <div><b>${r.n[0]}g</b><span>糖質</span></div><div><b>${r.n[1]}g</b><span>タンパク質</span></div>
+        <div><b>${r.n[2]}g</b><span>脂質</span></div><div><b>${r.n[3]}</b><span>kcal</span></div></div>
+        <p class="sub" style="margin:4px 0 10px">1人分の目安</p>`;
+      h += `<div class="row" style="justify-content:space-between"><b>${r.out ? '注文のめやす' : '材料'}</b>
+        <div class="row"><button class="sm" data-p="-1">−</button><span><b>${rPeople}</b>人分</span><button class="sm" data-p="1">＋</button></div></div>
+        <table class="ing">${r.ing.map(([n,q,u]) => `<tr><td>${esc(n)}</td><td>${fmtQty(q,u,rPeople)}</td></tr>`).join('')}</table>`;
+      if (r.how) h += `<p class="principle" style="margin-top:10px">${esc(r.how)}</p>`;
+    }
+    h += `<div class="row" style="justify-content:flex-end;margin-top:14px">`
+      + (cat === 'snack' ? `<button class="primary" id="rEat">間食として記録</button>` : '')
+      + `<button id="rClose">閉じる</button></div>`;
+    $('recipeBody').innerHTML = h;
+  }
+
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   // 食事時間から1日の流れを組み立てる
@@ -527,8 +673,11 @@
 
     const foodBox = (slot, label) => {
       const f = suggest(slot.cat), tip = trainTip(d, slot.cat);
+      const r = recipe(f);
       return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
-        <div class="tip">${principle(slot.cat)}</div>${tip ? `<div class="tip">${tip}</div>` : ''}</div>`};
+        ${r ? `<div class="nut">${nut(r.n)}</div>` : ''}
+        <div class="tip">${principle(slot.cat)}</div>${tip ? `<div class="tip">${tip}</div>` : ''}
+        ${r ? `<button class="more" data-recipe="${esc(f)}">📋 材料と量を見る</button>` : ''}</div>`};
     };
     const drinks = `<div class="pills">${menus().drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
 
@@ -610,7 +759,8 @@
       h += `<div class="sub" style="margin-top:10px">🙆 飲んでOK</div><div class="pills">${M.drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`
         +  `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${DRINK_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
     } else {
-      h += `<div class="sub" style="margin-top:10px">定番メニュー</div><div class="pills">${(M[cat] || []).map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
+      h += `<div class="sub" style="margin-top:10px">定番メニュー（タップで材料と量）</div><div class="pills">${(M[cat] || []).map(x =>
+        `<span class="pill${recipe(x) ? ' tap' : ''}" data-recipe="${esc(x)}">${esc(x)}</span>`).join('')}</div>`;
       if (diet() === 'keto') h += `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${KETO_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
       if (cat !== 'snack') h += `<p class="sub" style="margin-bottom:0">💪 筋トレ日はタンパク質のおかずを1品追加</p>`;
     }
@@ -737,13 +887,14 @@
 
   function logMeal(slot, food){
     withUndo('🍽 記録しました', d => {
-      d.meals = (d.meals || []).filter(m => !(typeof m === 'object' && m.slot === slot));
+      d.meals = (d.meals || []).filter(m => slot === 'snack' || !(typeof m === 'object' && m.slot === slot));
       d.meals.push({t:nowHM(), slot, food});
     });
   }
   $('todo').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
+    if (b.dataset.recipe) openRecipe(b.dataset.recipe);
+    else if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
     else if (b.dataset.other){ offsets[b.dataset.other] = (offsets[b.dataset.other] || 0) + 1; renderHome(); }
     else if (b.id === 'goReview') $('statusBtns').scrollIntoView({behavior:'smooth', block:'center'});
   };
@@ -752,6 +903,13 @@
     const d = day(todayKey()), id = li.dataset.slot;
     if (eaten(d, id)) withUndo('食事の記録を削除しました', d => { d.meals = d.meals.filter(m => !(typeof m === 'object' && m.slot === id)); });
     else { const s = slotsOf(windowOf(new Date())).find(x => x.id === id); logMeal(id, suggest(s.cat)); }
+  };
+  $('guide').onclick = e => { const p = e.target.closest('[data-recipe]'); if (p) openRecipe(p.dataset.recipe); };
+  $('recipeBody').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.p){ rPeople = Math.min(6, Math.max(1, rPeople + Number(b.dataset.p))); renderRecipe(); }
+    else if (b.id === 'rClose') $('dlgRecipe').close();
+    else if (b.id === 'rEat'){ $('dlgRecipe').close(); logMeal('snack', rName); }
   };
   $('guideTabs').onclick = e => { const b = e.target.closest('button[data-g]'); if (b){ guideCat = b.dataset.g; renderGuide(); } };
   $('btnTrain').onclick = () => withUndo(peek(todayKey()).train ? '筋トレ日をオフにしました' : '💪 筋トレ日にしました', d => { d.train = !d.train; });
