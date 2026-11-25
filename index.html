@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.4.1</title>
+<title>ファスティング信号 v0.4.2</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -84,6 +84,11 @@
   .food .nut{font-size:13px;margin-top:6px;color:#e2e8f0}
   .food .more{margin-top:8px;padding:6px 12px;font-size:13px;border-radius:99px}
   .pill.tap{cursor:pointer}
+  .picklist{list-style:none;margin:6px 0 0;padding:0;max-height:46vh;overflow:auto}
+  .picklist li{padding:10px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+  .picklist li.on{background:#0b1222;border-radius:8px}
+  .picklist li .s{font-size:12px;color:var(--sub);margin-top:2px}
+  .pickgrp{font-size:12px;color:var(--sub);margin-top:12px}
   .pill.tap::after{content:" ›";color:var(--sub)}
   .nrow{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin:8px 0 4px;gap:8px}
   .bar{position:relative;height:8px;background:#0b1222;border-radius:99px;overflow:visible}
@@ -296,7 +301,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.4.1</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.4.2</p>
 </section>
 </main>
 
@@ -308,6 +313,9 @@
 
 <!-- 材料と量 -->
 <dialog id="dlgRecipe"><div id="recipeBody"></div></dialog>
+
+<!-- メニューを選ぶ -->
+<dialog id="dlgPick"><div id="pickBody"></div></dialog>
 
 <!-- 調整日 -->
 <dialog id="dlgAdjust">
@@ -599,7 +607,7 @@
     if (w) h += `<div class="bar"><i style="width:${pct(sum[1], pHi)}%;background:var(--blue)"></i><em style="left:${pct(pLo,pHi)}%"></em></div>`;
     h += `<div class="nrow"><span>脂質</span><b>${sum[2]}g</b></div><div class="nrow"><span>エネルギー</span><b>${sum[3]}kcal</b></div>`;
     if (keto && c > limit) h += `<p class="sub" style="color:var(--red)">糖質が50gを超えました。今日はこのあと主食・甘い物を控えましょう。</p>`;
-    if (unknown) h += `<p class="sub">※ 栄養データのない記録が${unknown}件あります（自分で追加したメニュー・「違うものを食べた」など）</p>`;
+    if (unknown) h += `<p class="sub">※ 栄養データのない記録が${unknown}件あります（自分で追加したメニュー・一覧にないものを入力した場合など）</p>`;
     h += `<p class="sub" style="margin-bottom:0">記録した食事の合計（成分表をもとにした概算）</p>`;
     $('nutr').innerHTML = h;
   }
@@ -657,6 +665,8 @@
   // 日替わりのおすすめ（「別の候補」で次へ）
   const offsets = {};
   function suggest(cat, date = new Date()){
+    const pk = peek(ymd(date)).pick;
+    if (pk && pk[cat]) return pk[cat];
     const list = menus()[cat] || []; if (!list.length) return '';
     const seed = date.getFullYear()*400 + date.getMonth()*31 + date.getDate() + (offsets[cat] || 0);
     return list[seed % list.length];
@@ -680,7 +690,8 @@
       return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
         ${r ? `<div class="nut">${nut(r.n)}</div>` : ''}
         <div class="tip">${principle(slot.cat)}</div>${tip ? `<div class="tip">${tip}</div>` : ''}
-        ${r ? `<button class="more" data-recipe="${esc(f)}">📋 材料と量を見る</button>` : ''}</div>`};
+        <div class="row">${r ? `<button class="more" data-recipe="${esc(f)}">📋 材料と量を見る</button>` : ''}
+        <button class="more" data-pick="${slot.cat}" data-slot="${slot.id}">🔄 ほかから選ぶ</button></div></div>`};
     };
     const drinks = `<div class="pills">${menus().drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
 
@@ -703,7 +714,7 @@
         title = p.kind === 'soon' ? `🟡 あと${left}分で終了。${cur.name}を今のうちに` : `🍽 今は${cur.name}の時間です`;
         food = foodBox(cur, '今日のおすすめ');
         actions = `<div class="row"><button class="primary" data-eat="${cur.id}" data-food="${esc(food.f)}">これを食べた</button>
-          <button data-other="${cur.cat}">別の候補</button><button data-eat="${cur.id}" data-food="">違うものを食べた</button></div>`;
+          <button data-other="${cur.cat}">別の候補</button></div>`;
       } else if (nextMeal){
         title = `✅ ${cur.name.replace(/（.*）/,'')}OK！ 次は ${fromMin(nextMeal.t)} の${nextMeal.name}`;
         body = `小腹がすいたら間食OK：<b>${esc(suggest('snack'))}</b> など`;
@@ -898,7 +909,12 @@
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.recipe) openRecipe(b.dataset.recipe);
     else if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
-    else if (b.dataset.other){ offsets[b.dataset.other] = (offsets[b.dataset.other] || 0) + 1; renderHome(); }
+    else if (b.dataset.pick) openPick(b.dataset.pick, b.dataset.slot);
+    else if (b.dataset.other){
+      const pk = peek(todayKey()).pick;
+      if (pk && pk[b.dataset.other]){ delete pk[b.dataset.other]; save(); }
+      offsets[b.dataset.other] = (offsets[b.dataset.other] || 0) + 1; renderHome();
+    }
     else if (b.id === 'goReview') $('statusBtns').scrollIntoView({behavior:'smooth', block:'center'});
   };
   $('timeline').onclick = e => {
@@ -907,6 +923,39 @@
     if (eaten(d, id)) withUndo('食事の記録を削除しました', d => { d.meals = d.meals.filter(m => !(typeof m === 'object' && m.slot === id)); });
     else { const s = slotsOf(windowOf(new Date())).find(x => x.id === id); logMeal(id, suggest(s.cat)); }
   };
+  // ---- ほかのメニューから選ぶ ----
+  let pCat = null, pSlot = null;
+  function openPick(cat, slot){ pCat = cat; pSlot = slot; renderPick(); $('dlgPick').showModal(); }
+  function renderPick(){
+    const M = menus(), cur = suggest(pCat), labels = {first:'最初の一食', lunch:'昼食', dinner:'夕食', snack:'間食'};
+    const order = [pCat, ...['first','lunch','dinner','snack'].filter(k => k !== pCat)], seen = new Set();
+    let h = `<h3 style="margin:0 0 4px">${esc(slotName(pSlot) || labels[pCat])}のメニューを選ぶ</h3>
+      <p class="sub" style="margin:0">タップで今日のメニューに設定（ほかの時間帯の定番からも選べます）</p>`;
+    order.forEach(k => {
+      const items = (M[k] || []).filter(x => !seen.has(x)); items.forEach(x => seen.add(x));
+      if (!items.length) return;
+      h += `<div class="pickgrp">${labels[k]}の定番</div><ul class="picklist">` + items.map(x => {
+        const r = recipe(x);
+        return `<li data-name="${esc(x)}" class="${x === cur ? 'on' : ''}">${x === cur ? '✓ ' : ''}${esc(x)}
+          <div class="s">${r ? `糖質${r.n[0]}g・タンパク質${r.n[1]}g・脂質${r.n[2]}g・${r.n[3]}kcal` : '栄養データなし'}</div></li>`;
+      }).join('') + '</ul>';
+    });
+    h += `<div class="pickgrp">一覧にないもの</div>
+      <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：豚キムチ炒め" style="flex:1"><button id="pickFreeOk">決定</button></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button id="pickClose">閉じる</button></div>`;
+    $('pickBody').innerHTML = h;
+  }
+  function setPick(name){
+    const d = day(todayKey()); d.pick = Object.assign({}, d.pick, {[pCat]: name});
+    save(); $('dlgPick').close(); renderHome(); toast(`「${name}」にしました`);
+  }
+  $('pickBody').onclick = e => {
+    const li = e.target.closest('li[data-name]'); if (li) return setPick(li.dataset.name);
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'pickClose') $('dlgPick').close();
+    else if (b.id === 'pickFreeOk'){ const v = $('pickFree').value.trim(); if (v) setPick(v); }
+  };
+
   $('guide').onclick = e => { const p = e.target.closest('[data-recipe]'); if (p) openRecipe(p.dataset.recipe); };
   $('recipeBody').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
