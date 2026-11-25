@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.4.2</title>
+<title>ファスティング信号 v0.5</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -99,6 +99,7 @@
   .ntiles b{display:block;font-size:17px}
   .ntiles span{font-size:11px;color:var(--sub)}
   table.ing td:last-child{text-align:right;white-space:nowrap}
+  table.ing tr.chg td{color:var(--yellow)}
   .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
   .chip.adj{background:#713f12;color:#fde68a}
 
@@ -143,6 +144,7 @@
   .log li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #27344966}
   .log li:last-child{border-bottom:none}
   .log .del{padding:4px 10px;font-size:12px;border-radius:99px;color:var(--red);border-color:#7f1d1d;background:transparent;flex:none}
+  .log .del[data-mq]{color:var(--text);border-color:var(--line);margin-right:6px}
 </style>
 </head>
 <body>
@@ -301,7 +303,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.4.2</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.5</p>
 </section>
 </main>
 
@@ -458,8 +460,11 @@
     $('statusMsg').textContent = msg[d.status] || '夜にどれか1つをタップして1日を締めくくりましょう。';
 
     const del = (k, label = '✕') => `<button class="del" data-del="${k}">${label}</button>`;
-    const rows = (d.meals || []).map((m,i) => `<li><span>🍽 ${typeof m === 'string' ? m
-        : `${m.t} ${esc(slotName(m.slot))}${m.food ? '：' + esc(m.food) : ''}`}</span>${del('meal:'+i)}</li>`);
+    const rows = (d.meals || []).map((m,i) => {
+      const r = typeof m === 'object' && recipe(m.food), adj = r && isAdjusted(r, m.q);
+      return `<li><span>🍽 ${typeof m === 'string' ? m
+        : `${m.t} ${esc(slotName(m.slot))}${m.food ? '：' + esc(m.food) : ''}`}${adj ? ` <span class="sub">⚖️ 調整済み・タンパク質${adjNutr(r, m.q)[1]}g</span>` : ''}</span>
+        <span>${r ? `<button class="del" data-mq="${i}">量</button>` : ''}${del('meal:'+i)}</span></li>`; });
     if (d.water)  rows.push(`<li><span>💧 水分 ${d.water}回</span>${del('water','−1')}</li>`);
     if (d.cond)   rows.push(`<li><span>体調 ${d.cond}</span>${del('cond')}</li>`);
     if (d.weight) rows.push(`<li><span>体重 ${d.weight} kg</span>${del('weight')}</li>`);
@@ -572,6 +577,39 @@
     '無糖プロテイン':{n:[2,22,1,110], ing:[['プロテイン（無糖・プレーン）',30,'g'],['水',200,'ml']], how:'商品によって違うので、表示の炭水化物とタンパク質を確認。'},
   };
   const recipe = name => RECIPES[name] || null;
+  // ---- 量を調整できる材料（タンパク質・脂質の主な材料）----
+  // p = 100gあたり [糖質, タンパク質, 脂質, kcal]（八訂をもとにした概算）、g = 1個・1本などの重さ
+  const CHICKEN_THIGH = {p:[0,16.6,14.2,190]}, EGG = {p:[0.3,12.2,10.2,142], g:50}, OIL = {p:[0,0,100,890]}, TOFU = {p:[0.8,7.0,4.9,73]};
+  const ING = {
+    '鶏ささみ':{p:[0.1,23.9,0.8,98], g:50}, '鶏もも肉':CHICKEN_THIGH, '鶏もも肉（皮つき）':CHICKEN_THIGH,
+    'サラダチキン':{p:[0.5,24,1.5,110], g:110}, '豚ロース':{p:[0.2,19.3,19.2,248]}, '豚もも薄切り':{p:[0.2,20.5,10.2,171]},
+    '牛ステーキ（肩ロースなど）':{p:[0.1,17.9,17.4,221]},
+    '生鮭':{p:[0.1,22.3,4.1,124], g:100}, '塩鮭':{p:[0.1,22.4,11.1,183], g:80}, 'さばの塩焼き':{p:[0.1,26.2,19.1,263], g:80},
+    '刺身（まぐろ赤身・サーモンなど）':{p:[0.1,24,6,150]}, 'ツナ缶（油漬け）':{p:[0.1,17.7,21.7,265], g:70},
+    '卵':EGG, 'ゆで卵':EGG, '木綿豆腐':TOFU, '冷奴':TOFU, '納豆':{p:[5.4,16.5,10,190], g:45},
+    'ピザ用チーズ':{p:[1.4,25,27,350]}, 'プロセスチーズ':{p:[1.3,22.7,26,313], g:18},
+    'アボカド':{p:[0.8,2.1,17.5,178], g:140}, 'オリーブオイル':OIL, '油':OIL, 'バター':{p:[0.2,0.6,81,700]},
+    '素焼きナッツ（アーモンド・くるみ）':{p:[8,16,60,660]}, 'プロテイン（無糖・プレーン）':{p:[7,73,3,367]},
+  };
+  // 材料1単位あたりのグラム数（調整できない材料は 0）
+  function gramsPer(name, unit){
+    const x = ING[name]; if (!x) return 0;
+    if (unit.startsWith('g')) return 1;
+    if (unit === '大さじ') return 12;
+    if (unit === '小さじ') return 4;
+    return x.g || 0;
+  }
+  const adjStep = (q, unit) => unit.startsWith('g') ? (q <= 30 ? 5 : 10) : ['大さじ','小さじ'].includes(unit) || q < 1 ? 0.5 : 1;
+  // q = {材料の番号: 調整後の量}。調整後の栄養 [糖質, タンパク質, 脂質, kcal]
+  function adjNutr(r, q){
+    const n = r.n.slice();
+    Object.entries(q || {}).forEach(([i, v]) => {
+      const [name, base, unit] = r.ing[i] || [], g = name ? gramsPer(name, unit) : 0;
+      if (g) ING[name].p.forEach((x, k) => n[k] += (v - base) * g * x / 100);
+    });
+    return n.map(v => Math.max(0, Math.round(v)));
+  }
+  const isAdjusted = (r, q) => !!q && Object.entries(q).some(([i, v]) => r.ing[i] && r.ing[i][1] !== v);
   const catOf = name => Object.keys(DEFAULT_MENUS).find(k => (menus()[k] || []).includes(name));
   const nut = n => `糖質 <b>${n[0]}g</b>・タンパク質 <b>${n[1]}g</b>・脂質 ${n[2]}g・${n[3]}kcal`;
   function fmtQty(q, unit, people){
@@ -584,7 +622,7 @@
     const sum = [0,0,0,0]; let unknown = 0;
     (d.meals || []).forEach(m => {
       const r = typeof m === 'object' && recipe(m.food);
-      if (r) r.n.forEach((v,i) => sum[i] += v); else unknown++;
+      if (r) adjNutr(r, m.q).forEach((v,i) => sum[i] += v); else unknown++;
     });
     return {sum, unknown};
   }
@@ -613,9 +651,29 @@
   }
 
   // ---- 材料と量のダイアログ ----
-  let rPeople = 1, rName = null;
-  function openRecipe(name){ rName = name; rPeople = 1; renderRecipe(); $('dlgRecipe').showModal(); }
+  // rTarget：null＝見るだけ（人数を変えられる）／{cat}＝今日のおすすめの量を調整／{idx}＝記録済みの食事の量を調整
+  let rPeople = 1, rName = null, rTarget = null, rQ = {};
+  function openRecipe(name, target = null){
+    rName = name; rPeople = 1; rTarget = target;
+    const d = peek(todayKey());
+    rQ = target && target.idx != null ? Object.assign({}, (d.meals[target.idx] || {}).q)
+       : target && target.cat ? Object.assign({}, ((d.adj || {})[target.cat] || {}).food === name ? d.adj[target.cat].q : {})
+       : {};
+    renderRecipe(); $('dlgRecipe').showModal();
+  }
+  function saveAdj(){
+    const r = recipe(rName), q = isAdjusted(r, rQ) ? rQ : null;
+    if (rTarget.idx != null){
+      withUndo('量の調整を記録に反映しました', d => { const m = d.meals[rTarget.idx]; if (q) m.q = q; else delete m.q; });
+    } else {
+      const d = day(todayKey()); d.adj = d.adj || {};
+      if (q) d.adj[rTarget.cat] = {food:rName, q}; else delete d.adj[rTarget.cat];
+      save(); renderHome(); toast(q ? '量を調整しました' : '標準の量に戻しました');
+    }
+    $('dlgRecipe').close();
+  }
   function renderRecipe(){
+    if (rTarget) return renderAdjust();
     const r = recipe(rName), cat = catOf(rName);
     let h = `<h3 style="margin:0 0 4px">${esc(rName)}</h3>`;
     if (!r){
@@ -633,6 +691,23 @@
     h += `<div class="row" style="justify-content:flex-end;margin-top:14px">`
       + (cat === 'snack' ? `<button class="primary" id="rEat">間食として記録</button>` : '')
       + `<button id="rClose">閉じる</button></div>`;
+    $('recipeBody').innerHTML = h;
+  }
+  function renderAdjust(){
+    const r = recipe(rName), n = adjNutr(r, rQ), b = r.n;
+    const diff = (k) => n[k] === b[k] ? '' : `<span class="sub">（${n[k] > b[k] ? '+' : ''}${n[k] - b[k]}）</span>`;
+    let h = `<h3 style="margin:0 0 4px">${esc(rName)}</h3>
+      <div class="ntiles"><div><b>${n[0]}g</b><span>糖質${diff(0)}</span></div><div><b>${n[1]}g</b><span>タンパク質${diff(1)}</span></div>
+        <div><b>${n[2]}g</b><span>脂質${diff(2)}</span></div><div><b>${n[3]}</b><span>kcal${diff(3)}</span></div></div>
+      <p class="sub" style="margin:4px 0 10px">${rTarget.idx != null ? '記録した食事の量を調整（今日の栄養に反映）' : '食べる量に合わせて調整（「これを食べた」で記録に反映）'}</p>
+      <table class="ing">${r.ing.map(([nm,q,u], i) => {
+        const v = i in rQ ? rQ[i] : q, can = gramsPer(nm, u) > 0 && q > 0;
+        return `<tr${v !== q ? ' class="chg"' : ''}><td>${esc(nm)}</td><td>${can
+          ? `<button class="sm" data-adj="${i}" data-d="-1">−</button> <b>${fmtQty(v, u.replace(/（(\d+)g/, () => `（${Math.round(gramsPer(nm,u)*v)}g`), 1)}</b> <button class="sm" data-adj="${i}" data-d="1">＋</button>`
+          : fmtQty(q,u,1)}</td></tr>`; }).join('')}</table>`;
+    if (r.how) h += `<p class="principle" style="margin-top:10px">${esc(r.how)}</p>`;
+    h += `<div class="row" style="justify-content:flex-end;margin-top:14px"><button id="rReset">標準に戻す</button>
+      <button id="rClose">閉じる</button><button class="primary" id="rSave">この量にする</button></div>`;
     $('recipeBody').innerHTML = h;
   }
 
@@ -686,11 +761,11 @@
 
     const foodBox = (slot, label) => {
       const f = suggest(slot.cat), tip = trainTip(d, slot.cat);
-      const r = recipe(f);
+      const r = recipe(f), a = (d.adj || {})[slot.cat], q = a && a.food === f ? a.q : null;
       return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
-        ${r ? `<div class="nut">${nut(r.n)}</div>` : ''}
+        ${r ? `<div class="nut">${q ? '⚖️ 量を調整済み：' : ''}${nut(adjNutr(r, q))}</div>` : ''}
         <div class="tip">${principle(slot.cat)}</div>${tip ? `<div class="tip">${tip}</div>` : ''}
-        <div class="row">${r ? `<button class="more" data-recipe="${esc(f)}">📋 材料と量を見る</button>` : ''}
+        <div class="row">${r ? `<button class="more" data-recipe="${esc(f)}" data-cat="${slot.cat}">📋 材料・量を調整</button>` : ''}
         <button class="more" data-pick="${slot.cat}" data-slot="${slot.id}">🔄 ほかから選ぶ</button></div></div>`};
     };
     const drinks = `<div class="pills">${menus().drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`;
@@ -902,12 +977,14 @@
   function logMeal(slot, food){
     withUndo('🍽 記録しました', d => {
       d.meals = (d.meals || []).filter(m => slot === 'snack' || !(typeof m === 'object' && m.slot === slot));
-      d.meals.push({t:nowHM(), slot, food});
+      const a = (d.adj || {})[slot], m = {t:nowHM(), slot, food};
+      if (a && a.food === food){ m.q = a.q; delete d.adj[slot]; }
+      d.meals.push(m);
     });
   }
   $('todo').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.recipe) openRecipe(b.dataset.recipe);
+    if (b.dataset.recipe) openRecipe(b.dataset.recipe, b.dataset.cat ? {cat:b.dataset.cat} : null);
     else if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
     else if (b.dataset.pick) openPick(b.dataset.pick, b.dataset.slot);
     else if (b.dataset.other){
@@ -960,6 +1037,12 @@
   $('recipeBody').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.p){ rPeople = Math.min(6, Math.max(1, rPeople + Number(b.dataset.p))); renderRecipe(); }
+    else if (b.dataset.adj){
+      const i = b.dataset.adj, [, q, u] = recipe(rName).ing[i], cur = i in rQ ? rQ[i] : q;
+      rQ[i] = Math.max(0, Math.round((cur + adjStep(q, u) * Number(b.dataset.d)) * 10) / 10); renderRecipe();
+    }
+    else if (b.id === 'rReset'){ rQ = {}; renderRecipe(); }
+    else if (b.id === 'rSave') saveAdj();
     else if (b.id === 'rClose') $('dlgRecipe').close();
     else if (b.id === 'rEat'){ $('dlgRecipe').close(); logMeal('snack', rName); }
   };
@@ -993,6 +1076,8 @@
   });
   // 今日の記録の ✕
   $('log').onclick = e => {
+    const q = e.target.closest('button[data-mq]');
+    if (q){ const i = Number(q.dataset.mq); return openRecipe(peek(todayKey()).meals[i].food, {idx:i}); }
     const b = e.target.closest('button[data-del]'); if (!b) return;
     const [kind, i] = b.dataset.del.split(':');
     withUndo('削除しました', d => {
