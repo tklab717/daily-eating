@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.6</title>
+<title>ファスティング信号 v0.7</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -115,6 +115,15 @@
   .ntiles span{font-size:11px;color:var(--sub)}
   table.ing td:last-child{text-align:right;white-space:nowrap}
   table.ing tr.chg td{color:var(--yellow)}
+  table.ing tr.added td{color:#86efac}
+  button.sm.x{padding:8px 8px;color:var(--sub)}
+  .addbtn{margin-top:10px}
+  .addbox,.savebox{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#0b1222}
+  .pill.addp{cursor:pointer;color:inherit;display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1.3;padding:6px 10px}
+  .pill.addp span{font-size:11px;color:var(--sub)}
+  .pill.addp.warn{border-color:#a16207}
+  .pill.addp.on{opacity:.5}
+  ul.hints{margin:4px 0 0;padding-left:18px;font-size:13px;line-height:1.6}
   .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
   .chip.adj{background:#713f12;color:#fde68a}
 
@@ -321,7 +330,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.6</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.7</p>
 </section>
 </main>
 
@@ -595,10 +604,26 @@
     'アボカド半分':{n:[1,2,12,123], ing:[['アボカド',0.5,'個（70g）']], how:'塩・しょうゆ・わさびを少し。'},
     '無糖プロテイン':{n:[2,22,1,110], ing:[['プロテイン（無糖・プレーン）',30,'g'],['水',200,'ml']], how:'商品によって違うので、表示の炭水化物とタンパク質を確認。'},
   };
-  const recipe = name => RECIPES[name] || null;
+  // 自分で保存したアレンジ（S.settings.custom = {名前: {n, ing, how, out}}）も同じ形で返す
+  const recipe = name => RECIPES[name] || (S.settings.custom || {})[name] || null;
+  // 元のメニュー r に調整 q（量の変更・追加した食材）を反映した1人分のメニューを作る
+  function compose(r, q){
+    const ing = [];
+    r.ing.forEach(([nm, v, u], i) => {
+      if (!(i in q)) return ing.push([nm, v, u]);
+      if (q[i] === 0 && v > 0) return;                       // 0にした材料は外す
+      const g = gramsPer(nm, u);
+      ing.push([nm, q[i], g ? u.replace(/（(\d+)g/, () => `（${Math.round(g * q[i])}g`) : u]);
+    });
+    (q.add || []).forEach(([nm, v, u]) => ing.push([nm, v, u]));
+    const hints = (q.add || []).map(([nm]) => ADDS[nm] && `${nm}：${ADDS[nm][3]}`).filter(Boolean);
+    return {n:adjNutr(r, q), ing, out:r.out, custom:true,
+            how:[r.how, hints.length ? '【追加した食材】' + hints.join('／') : ''].filter(Boolean).join('\n')};
+  }
   // ---- 量を調整できる材料（タンパク質・脂質の主な材料）----
   // p = 100gあたり [糖質, タンパク質, 脂質, kcal]（八訂をもとにした概算）、g = 1個・1本などの重さ
   const CHICKEN_THIGH = {p:[0,16.6,14.2,190]}, EGG = {p:[0.3,12.2,10.2,142], g:50}, OIL = {p:[0,0,100,890]}, TOFU = {p:[0.8,7.0,4.9,73]};
+  const CABBAGE = {p:[3.4,1.3,0.2,21]}, BROC = {p:[1.5,5.4,0.6,37]}, LEAF = {p:[1.7,0.6,0.1,11]}, MUSH = {p:[1.8,2.7,0.5,22]};
   const ING = {
     '鶏ささみ':{p:[0.1,23.9,0.8,98], g:50}, '鶏もも肉':CHICKEN_THIGH, '鶏もも肉（皮つき）':CHICKEN_THIGH,
     'サラダチキン':{p:[0.5,24,1.5,110], g:110}, '豚ロース':{p:[0.2,19.3,19.2,248]}, '豚もも薄切り':{p:[0.2,20.5,10.2,171]},
@@ -609,7 +634,68 @@
     'ピザ用チーズ':{p:[1.4,25,27,350]}, 'プロセスチーズ':{p:[1.3,22.7,26,313], g:18},
     'アボカド':{p:[0.8,2.1,17.5,178], g:140}, 'オリーブオイル':OIL, '油':OIL, 'バター':{p:[0.2,0.6,81,700]},
     '素焼きナッツ（アーモンド・くるみ）':{p:[8,16,60,660]}, 'プロテイン（無糖・プレーン）':{p:[7,73,3,367]},
+    // v0.7：追加できる食材（野菜・きのこ・肉など）
+    'キャベツ':CABBAGE, 'キャベツ（千切り）':CABBAGE, 'ブロッコリー':BROC, 'ブロッコリー・いんげん':BROC,
+    'ほうれん草':{p:[0.3,2.2,0.4,18]}, '小松菜':{p:[0.5,1.5,0.2,13]}, 'もやし':{p:[1.3,1.7,0.1,15]},
+    '白菜':{p:[1.9,0.8,0.1,13]}, '白菜・春菊':{p:[1.5,1.2,0.2,15]}, 'レタス':LEAF, '葉物野菜':LEAF, '葉物野菜（レタス・ベビーリーフ）':LEAF, 'レタス・水菜':LEAF,
+    '水菜':{p:[1.8,2.2,0.1,23]}, 'きゅうり':{p:[1.9,1.0,0.1,13]}, 'ピーマン':{p:[2.8,0.9,0.2,20], g:30},
+    'アスパラガス':{p:[2.1,2.6,0.2,21], g:20}, 'ズッキーニ':{p:[1.5,1.3,0.1,16]}, '大根':{p:[2.7,0.5,0.1,15]},
+    'トマト':{p:[3.7,0.7,0.1,20]}, '玉ねぎ':{p:[6.9,1.0,0.1,33]}, '長ねぎ':{p:[5.8,1.4,0.1,35]},
+    'しめじ':MUSH, 'まいたけ':{p:[0.9,2.0,0.5,22]}, 'えのき':{p:[3.7,2.7,0.2,34]}, 'しめじ・まいたけ':MUSH, 'きのこ':MUSH,
+    '鶏むね肉（皮なし）':{p:[0.1,23.3,1.9,105]}, '豚バラ薄切り':{p:[0.1,14.4,35.4,366]},
+    'ベーコン':{p:[0.3,12.9,39.1,400], g:17}, 'ウインナー':{p:[3.0,11.5,30.6,319], g:20},
+    '厚揚げ':{p:[0.2,10.7,11.3,143]}, 'ごま油':OIL, 'マヨネーズ':{p:[0.6,1.4,76,668]},
   };
+  // 追加できる食材の一覧 [名前, 標準の量, 単位, 調理のひとこと]
+  const ADD_GROUPS = [
+    ['🥬 野菜・きのこ', [
+      ['キャベツ',50,'g','ざく切りにして同じフライパンでふたをして2〜3分蒸し焼き。千切りで添えてもOK'],
+      ['ブロッコリー',50,'g','小房に分けて2分ゆでるか、レンジ600Wで1分半'],
+      ['ほうれん草',50,'g','1分ゆでて水にとり、しぼって添えるか、油でさっと炒める'],
+      ['小松菜',50,'g','4cm長さに切り、油でさっと炒める（下ゆで不要）'],
+      ['もやし',50,'g','強火でさっと炒めるか、レンジ600Wで1分'],
+      ['白菜',50,'g','ざく切りにしてスープや蒸し焼きに'],
+      ['レタス',30,'g','ちぎって添えるだけ。巻いて食べても'],
+      ['水菜',30,'g','4cm長さに切って生で添える'],
+      ['きゅうり',50,'g','薄切りか、たたいて塩をふる'],
+      ['ピーマン',1,'個','細切りにして一緒に炒める'],
+      ['アスパラガス',2,'本','根元の皮をむき、斜め切りにして一緒に焼く'],
+      ['ズッキーニ',50,'g','輪切りにしてオリーブオイルで焼き、塩をふる'],
+      ['しめじ',50,'g','石づきを取ってほぐし、一緒に炒める'],
+      ['まいたけ',50,'g','手でさいて一緒に焼く'],
+      ['えのき',50,'g','根元を切ってほぐし、蒸し焼きやスープに'],
+      ['大根',50,'g','薄いいちょう切りにしてスープや味噌汁に'],
+      ['トマト',50,'g','くし切りにして添える'],
+      ['長ねぎ',20,'g','斜め薄切りにして一緒に焼くか、小口切りで薬味に'],
+      ['玉ねぎ',30,'g','薄切りにして一緒に炒める（糖質は多め）'],
+    ]],
+    ['🍗 肉・魚・卵・大豆', [
+      ['卵',1,'個','目玉焼き・ゆで卵・溶き卵でとじるなど'],
+      ['鶏ささみ',1,'本','筋を取って一口大に切り、一緒に焼く'],
+      ['鶏むね肉（皮なし）',50,'g','そぎ切りにして塩をふり、一緒に焼く'],
+      ['鶏もも肉',50,'g','一口大に切り、皮目から焼く'],
+      ['豚バラ薄切り',50,'g','3cm幅に切り、先に焼いて脂を出してから野菜を炒める'],
+      ['豚ロース',50,'g','一口大に切って一緒に焼く'],
+      ['ベーコン',1,'枚','1cm幅に切り、先に炒めて香りを出す'],
+      ['ウインナー',1,'本','斜め切りにして一緒に焼く（商品により糖質あり）'],
+      ['ツナ缶（油漬け）',1,'缶','軽く油を切ってのせるか和える'],
+      ['サラダチキン',1,'袋','ほぐしてのせる'],
+      ['木綿豆腐',50,'g','角切りにしてスープへ、または焼いて添える'],
+      ['厚揚げ',50,'g','一口大に切って焼き、しょうゆを少し'],
+      ['納豆',1,'パック','たれは半分にして添える'],
+    ]],
+    ['🧀 脂質・チーズ', [
+      ['アボカド',0.5,'個','角切りか薄切りにして添える'],
+      ['ピザ用チーズ',15,'g','最後にのせ、ふたをして溶かす'],
+      ['プロセスチーズ',1,'個','角切りにして添える'],
+      ['オリーブオイル',1,'小さじ','仕上げにかける・焼き油に'],
+      ['ごま油',1,'小さじ','炒め油や仕上げの香りづけに'],
+      ['バター',5,'g','仕上げにのせて溶かす'],
+      ['マヨネーズ',1,'小さじ','和えるか、のせて焼く'],
+      ['素焼きナッツ（アーモンド・くるみ）',10,'g','砕いてサラダにのせる'],
+    ]],
+  ];
+  const ADDS = Object.fromEntries(ADD_GROUPS.flatMap(([, L]) => L.map(x => [x[0], x])));
   // 材料1単位あたりのグラム数（調整できない材料は 0）
   function gramsPer(name, unit){
     const x = ING[name]; if (!x) return 0;
@@ -623,12 +709,18 @@
   function adjNutr(r, q){
     const n = r.n.slice();
     Object.entries(q || {}).forEach(([i, v]) => {
+      if (i === 'add') return;
       const [name, base, unit] = r.ing[i] || [], g = name ? gramsPer(name, unit) : 0;
       if (g) ING[name].p.forEach((x, k) => n[k] += (v - base) * g * x / 100);
     });
+    ((q || {}).add || []).forEach(([name, v, unit]) => {
+      const g = gramsPer(name, unit); if (g) ING[name].p.forEach((x, k) => n[k] += v * g * x / 100);
+    });
     return n.map(v => Math.max(0, Math.round(v)));
   }
-  const isAdjusted = (r, q) => !!q && Object.entries(q).some(([i, v]) => r.ing[i] && r.ing[i][1] !== v);
+  const isAdjusted = (r, q) => !!q && ((q.add || []).length > 0 || Object.entries(q).some(([i, v]) => i !== 'add' && r.ing[i] && r.ing[i][1] !== v));
+  const addNutr = (name, v, unit) => { const g = gramsPer(name, unit); return g ? ING[name].p.map(x => v * g * x / 100) : [0,0,0,0]; };
+  const unitLabel = (name, v, u) => (u.startsWith('g') || ['大さじ','小さじ'].includes(u)) ? fmtQty(v, u, 1) : `${fmtQty(v, u, 1)}（${Math.round(gramsPer(name, u) * v)}g）`;
   const catOf = name => Object.keys(DEFAULT_MENUS).find(k => (menus()[k] || []).includes(name));
   const nut = n => `糖質 <b>${n[0]}g</b>・タンパク質 <b>${n[1]}g</b>・脂質 ${n[2]}g・${n[3]}kcal`;
   function fmtQty(q, unit, people){
@@ -671,17 +763,19 @@
 
   // ---- 材料と量のダイアログ ----
   // rTarget：null＝見るだけ（人数を変えられる）／{cat}＝今日のおすすめの量を調整／{idx}＝記録済みの食事の量を調整
-  let rPeople = 1, rName = null, rTarget = null, rQ = {};
+  let rPeople = 1, rName = null, rTarget = null, rQ = {}, rAddOpen = false, rAddGrp = 0, rSaveOpen = false;
+  const clone = o => JSON.parse(JSON.stringify(o || {}));
   function openRecipe(name, target = null){
-    rName = name; rPeople = 1; rTarget = target;
+    rName = name; rPeople = 1; rTarget = target; rAddOpen = false; rSaveOpen = false;
     const d = peek(todayKey());
-    rQ = target && target.idx != null ? Object.assign({}, (d.meals[target.idx] || {}).q)
-       : target && target.cat ? Object.assign({}, ((d.adj || {})[target.cat] || {}).food === name ? d.adj[target.cat].q : {})
+    rQ = target && target.idx != null ? clone((d.meals[target.idx] || {}).q)
+       : target && target.cat ? clone(((d.adj || {})[target.cat] || {}).food === name ? d.adj[target.cat].q : {})
        : {};
     renderRecipe(); $('dlgRecipe').showModal();
   }
   function saveAdj(){
-    const r = recipe(rName), q = isAdjusted(r, rQ) ? rQ : null;
+    if (rQ.add && !rQ.add.length) delete rQ.add;
+    const r = recipe(rName), q = isAdjusted(r, rQ) ? clone(rQ) : null;
     if (rTarget.idx != null){
       withUndo('量の調整を記録に反映しました', d => { const m = d.meals[rTarget.idx]; if (q) m.q = q; else delete m.q; });
     } else {
@@ -690,6 +784,23 @@
       save(); renderHome(); toast(q ? '量を調整しました' : '標準の量に戻しました');
     }
     $('dlgRecipe').close();
+  }
+  // 調整した内容に名前をつけて定番メニューに保存
+  function saveCustom(){
+    const name = ($('rSaveName').value || '').trim();
+    if (!name) return toast('名前を入れてください');
+    if (RECIPES[name]) return toast('最初からあるメニューと同じ名前です。別の名前にしてください');
+    if (rQ.add && !rQ.add.length) delete rQ.add;
+    S.settings.custom = Object.assign({}, S.settings.custom, {[name]: compose(recipe(rName), rQ)});
+    const d = day(todayKey()), meal = rTarget.idx != null ? d.meals[rTarget.idx] : null;
+    const cat = rTarget.cat || (meal && meal.slot) || catOf(rName) || 'dinner';
+    const k = ['first','lunch','dinner','snack'].includes(cat) ? cat : 'dinner';
+    const all = S.settings.menus || {}, list = (menus()[k] || []).slice();
+    if (!list.includes(name)) list.push(name);
+    all[diet()] = Object.assign({}, all[diet()], {[k]: list}); S.settings.menus = all;
+    if (meal){ meal.food = name; delete meal.q; }
+    else { d.pick = Object.assign({}, d.pick, {[rTarget.cat]: name}); if (d.adj) delete d.adj[rTarget.cat]; }
+    save(); $('dlgRecipe').close(); renderAll(); toast(`⭐「${name}」を定番に保存しました`);
   }
   function renderRecipe(){
     if (rTarget) return renderAdjust();
@@ -705,7 +816,7 @@
       h += `<div class="row" style="justify-content:space-between"><b>${r.out ? '注文のめやす' : '材料'}</b>
         <div class="row"><button class="sm" data-p="-1">−</button><span><b>${rPeople}</b>人分</span><button class="sm" data-p="1">＋</button></div></div>
         <table class="ing">${r.ing.map(([n,q,u]) => `<tr><td>${esc(n)}</td><td>${fmtQty(q,u,rPeople)}</td></tr>`).join('')}</table>`;
-      if (r.how) h += `<p class="principle" style="margin-top:10px">${esc(r.how)}</p>`;
+      if (r.how) h += `<p class="principle" style="margin-top:10px;white-space:pre-line">${esc(r.how)}</p>`;
     }
     h += `<div class="row" style="justify-content:flex-end;margin-top:14px">`
       + (cat === 'snack' ? `<button class="primary" id="rEat">間食として記録</button>` : '')
@@ -723,11 +834,34 @@
         const v = i in rQ ? rQ[i] : q, can = gramsPer(nm, u) > 0 && q > 0;
         return `<tr${v !== q ? ' class="chg"' : ''}><td>${esc(nm)}</td><td>${can
           ? `<button class="sm" data-adj="${i}" data-d="-1">−</button> <b>${fmtQty(v, u.replace(/（(\d+)g/, () => `（${Math.round(gramsPer(nm,u)*v)}g`), 1)}</b> <button class="sm" data-adj="${i}" data-d="1">＋</button>`
-          : fmtQty(q,u,1)}</td></tr>`; }).join('')}</table>`;
-    if (r.how) h += `<p class="principle" style="margin-top:10px">${esc(r.how)}</p>`;
-    h += `<div class="row" style="justify-content:flex-end;margin-top:14px"><button id="rReset">標準に戻す</button>
+          : fmtQty(q,u,1)}</td></tr>`; }).join('')}${(rQ.add || []).map(([nm, v, u], j) =>
+        `<tr class="added"><td>＋ ${esc(nm)}</td><td><button class="sm" data-addq="${j}" data-d="-1">−</button> <b>${unitLabel(nm, v, u)}</b> <button class="sm" data-addq="${j}" data-d="1">＋</button> <button class="sm x" data-addx="${j}" aria-label="削除">✕</button></td></tr>`).join('')}</table>`;
+    h += renderAddPicker(r);
+    const hints = (rQ.add || []).map(([nm]) => ADDS[nm] && `<li><b>${esc(nm)}</b>：${esc(ADDS[nm][3])}</li>`).filter(Boolean);
+    if (r.how) h += `<p class="principle" style="margin-top:10px;white-space:pre-line">${esc(r.how)}</p>`;
+    if (hints.length) h += `<div class="sub" style="margin-top:8px">追加した食材の使い方</div><ul class="hints">${hints.join('')}</ul>`;
+    if (rSaveOpen){
+      const def = (rQ.add || []).length ? `${rName}＋${rQ.add.map(a => a[0].replace(/（.*）/, '')).join('・')}` : rName;
+      h += `<div class="savebox"><div class="sub">名前をつけて定番メニューに保存（次から1タップで選べます）</div>
+        <div class="row" style="margin-top:6px"><input id="rSaveName" value="${esc(def)}" style="flex:1"><button class="primary" id="rSaveOk">保存</button></div></div>`;
+    }
+    h += `<div class="row" style="justify-content:flex-end;margin-top:14px;flex-wrap:wrap"><button id="rReset">標準に戻す</button>
+      ${isAdjusted(r, rQ) && !rSaveOpen ? '<button id="rSaveAs">⭐ 定番に保存</button>' : ''}
       <button id="rClose">閉じる</button><button class="primary" id="rSave">この量にする</button></div>`;
     $('recipeBody').innerHTML = h;
+  }
+
+  function renderAddPicker(r){
+    if (!rAddOpen) return `<button class="more addbtn" id="rAddOpen">＋ 家にある食材を追加</button>`;
+    const have = new Set([...r.ing.map(x => x[0]), ...(rQ.add || []).map(x => x[0])]), keto = diet() === 'keto';
+    const [, list] = ADD_GROUPS[rAddGrp];
+    const items = list.map(x => ({x, c:addNutr(x[0], x[1], x[2])[0]}));
+    if (keto) items.sort((a, b) => a.c - b.c);
+    return `<div class="addbox"><div class="row" style="justify-content:space-between"><b>食材を追加</b><button class="sm" id="rAddClose">閉じる</button></div>
+      <div class="tabs" style="margin-top:6px">${ADD_GROUPS.map(([g], i) => `<button data-addg="${i}" class="${i === rAddGrp ? 'on' : ''}">${g}</button>`).join('')}</div>
+      <div class="pills">${items.map(({x, c}) => { const on = have.has(x[0]);
+        return `<button class="pill addp${on ? ' on' : ''}${keto && c >= 3 ? ' warn' : ''}" data-addn="${esc(x[0])}"${on ? ' disabled' : ''}>${on ? '✓ ' : ''}${esc(x[0].replace(/（.*）/, ''))}<span>${unitLabel(x[0], x[1], x[2]).replace(/（.*）/, '')}・糖質${Math.round(c * 10) / 10}g</span></button>`; }).join('')}</div>
+      <p class="sub" style="margin:6px 0 0">タップで追加（あとから −／＋ で量を変えられます）${keto ? '。黄色は糖質がやや多め' : ''}</p></div>`;
   }
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1138,7 +1272,23 @@
       const i = b.dataset.adj, [, q, u] = recipe(rName).ing[i], cur = i in rQ ? rQ[i] : q;
       rQ[i] = Math.max(0, Math.round((cur + adjStep(q, u) * Number(b.dataset.d)) * 10) / 10); renderRecipe();
     }
-    else if (b.id === 'rReset'){ rQ = {}; renderRecipe(); }
+    else if (b.dataset.addn){
+      const x = ADDS[b.dataset.addn]; (rQ.add = rQ.add || []).push([x[0], x[1], x[2]]); renderRecipe();
+      toast(`${x[0].replace(/（.*）/, '')}を追加しました`);
+    }
+    else if (b.dataset.addq){
+      const a = rQ.add[b.dataset.addq], def = ADDS[a[0]] ? ADDS[a[0]][1] : a[1];
+      a[1] = Math.round((a[1] + adjStep(def, a[2]) * Number(b.dataset.d)) * 10) / 10;
+      if (a[1] <= 0) rQ.add.splice(b.dataset.addq, 1);
+      renderRecipe();
+    }
+    else if (b.dataset.addx){ rQ.add.splice(b.dataset.addx, 1); renderRecipe(); }
+    else if (b.dataset.addg){ rAddGrp = Number(b.dataset.addg); renderRecipe(); }
+    else if (b.id === 'rAddOpen'){ rAddOpen = true; renderRecipe(); }
+    else if (b.id === 'rAddClose'){ rAddOpen = false; renderRecipe(); }
+    else if (b.id === 'rSaveAs'){ rSaveOpen = true; renderRecipe(); setTimeout(() => $('rSaveName') && $('rSaveName').focus(), 0); }
+    else if (b.id === 'rSaveOk') saveCustom();
+    else if (b.id === 'rReset'){ rQ = {}; rSaveOpen = false; renderRecipe(); }
     else if (b.id === 'rSave') saveAdj();
     else if (b.id === 'rClose') $('dlgRecipe').close();
     else if (b.id === 'rEat'){ $('dlgRecipe').close(); logMeal('snack', rName); }

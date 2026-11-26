@@ -1,5 +1,5 @@
 // ファスティング信号 — オフライン用キャッシュ
-const CACHE = 'fasting-signal-v0.6';
+const CACHE = 'fasting-signal-v0.7';
 const FILES = ['./', './index.html', './manifest.json', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
