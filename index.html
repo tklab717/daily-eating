@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.5</title>
+<title>ファスティング信号 v0.6</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -61,6 +61,21 @@
   .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .pill{font-size:13px;padding:5px 10px;border-radius:99px;background:#0b1222;border:1px solid var(--line)}
   .pill.ng{color:var(--red);border-color:#7f1d1d}
+
+  /* からだの中 */
+  .body-card .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .body-card .elapsed{font-size:13px;color:var(--sub)}
+  .body-card .elapsed b{font-size:18px;color:var(--text)}
+  .body-card .state{font-size:18px;font-weight:800;margin:6px 0 4px}
+  .body-card .what{font-size:14px;color:#cbd5e1;line-height:1.6;margin:0}
+  .btrack{position:relative;display:flex;gap:3px;margin:12px 0 4px;height:10px}
+  .btrack span{flex:1;border-radius:4px;background:#334155;transition:background .3s}
+  .btrack span.on{background:var(--c)}
+  .btrack .mk{position:absolute;top:-4px;width:4px;height:18px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px #0f172a;transform:translateX(-2px)}
+  .bscale{display:grid;grid-template-columns:repeat(6,1fr);font-size:11px;color:var(--sub)}
+  .bcomment{margin-top:10px;padding:10px 12px;border-radius:12px;background:#0b1222;font-size:14px;line-height:1.6}
+  .bnext{font-size:13px;color:var(--sub);margin-top:8px}
+  .bnote{font-size:11px;color:#64748b;margin-top:6px}
 
   /* timeline */
   .tl{list-style:none;margin:0;padding:0 0 0 6px}
@@ -176,6 +191,9 @@
       </div>
     </div>
   </div>
+
+  <!-- からだの中 -->
+  <div class="card body-card" id="bodyCard"></div>
 
   <!-- 次にやること -->
   <div class="card todo" id="todo"></div>
@@ -303,7 +321,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.5</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.6</p>
 </section>
 </main>
 
@@ -442,6 +460,7 @@
     $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱い';
     $('btnAdjust').classList.toggle('on', w.adjust);
 
+    renderBody(now, p);
     renderTodo(now, p, d);
     renderTimeline(now, d);
     renderNutr(d);
@@ -947,6 +966,84 @@
       $('menuEdit').innerHTML = Object.entries(names).map(([k,n]) =>
         `<label>${n}</label><textarea data-m="${k}" rows="${M[k].length + 1}">${esc(M[k].join('\n'))}</textarea>`).join('');
     }
+  }
+
+
+  // ---------- からだの中（最後に食べてからの経過時間で目安を表示） ----------
+  // 時間はあくまで一般的な目安。個人差が大きい（前日の食事・運動量・体質）。
+  const BODY = [
+    {h:0,  icon:'🍽', name:'消化・吸収中', c:'#f59e0b',
+     what:'食べたものを消化して、血液に栄養が入ってくる時間。インスリンが働いて、エネルギーを細胞に届けています。',
+     tips:['よく噛んでゆっくり。満腹のサインは食べ始めて15〜20分後に届きます。',
+           'たんぱく質と野菜を先に。血糖の上がり方がゆるやかになります。']},
+    {h:4,  icon:'🧹', name:'後かたづけモード', c:'#eab308',
+     what:'吸収がひと段落。インスリンが下がり始め、肝臓にためた糖（グリコーゲン）を少しずつ使い始めます。',
+     tips:['ここから先は飲み物だけ。間食しないことが一番の近道です。',
+           '口さみしいときは温かいお茶や白湯で。']},
+    {h:8,  icon:'🔄', name:'切り替え準備中', c:'#22c55e',
+     what:'糖のストックが減ってきて、体が「脂肪を分解してエネルギーにする」方向へ切り替え始めています。',
+     tips:['寝ている時間もこの切り替えはちゃんと進んでいます。',
+           '空腹感が出ても、それは体が切り替わっているサインのひとつ。']},
+    {h:12, icon:'🔥', name:'脂肪燃焼スイッチON', c:'#3b82f6',
+     what:'脂肪の分解が進み、肝臓でケトン体がつくられ始めます。ケトン体は脳や筋肉の燃料になります。',
+     tips:['空腹は波のように来て、多くは15〜20分で引きます。水か炭酸水でやり過ごしましょう。',
+           'ブラックコーヒーや緑茶はこの時間の味方です。']},
+    {h:14, icon:'⚡', name:'ケトン燃焼モード', c:'#6366f1',
+     what:'ケトン体がしっかり増えてきて、脂肪をメインの燃料にしている状態。頭がすっきりする人も多い時間帯です。',
+     tips:['ゴール目前。ここまで来たら、あとは時間が味方してくれます。',
+           'ふらつき・強い不調があれば無理せず食事に進んでOK。']},
+    {h:16, icon:'🏁', name:'目標ゾーン到達', c:'#a855f7',
+     what:'16時間を超えて、今日のファスティングは達成。脂肪をエネルギーにする流れが続いています。',
+     tips:['達成おめでとう！最初の一食はたんぱく質から、ゆっくり始めましょう。',
+           'ここから延ばす必要はありません。予定どおり食事にしましょう。']},
+  ];
+  const BODY_MAX_H = 18;
+
+  // 最後に食べた時刻：前回の食事時間の終わり と 記録した食事 の遅いほう
+  function lastIntake(now, p){
+    const today = new Date(now); today.setHours(0,0,0,0);
+    let base;
+    if (p.kind === 'fast') base = p.from;
+    else { const y = addDays(today,-1); base = at(y, windowOf(y).end); }
+    let last = base;
+    [addDays(today,-1), today].forEach(dt => {
+      (peek(ymd(dt)).meals || []).forEach(m => {
+        const t = typeof m === 'string' ? m : m.t;
+        if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return;
+        const x = at(dt, toMin(t));
+        if (x <= now && x > last) last = x;
+      });
+    });
+    return last;
+  }
+
+  function renderBody(now, p){
+    const since = lastIntake(now, p), hrs = Math.max(0, (now - since) / 3600000);
+    let i = 0; BODY.forEach((b,k) => { if (hrs >= b.h) i = k; });
+    const b = BODY[i], nx = BODY[i+1];
+    const keto = diet() === 'keto';
+    // コメントは時間帯ごとに日替わりで（同じ日は同じ文）
+    const seed = now.getDate() + i;
+    let tip = b.tips[seed % b.tips.length];
+    if (keto && i >= 2 && i <= 3) tip += 'ケトン重視の食事なので、糖のストックが少なく切り替えが早めに進みやすいです。';
+    const seg = BODY.map((x,k) => `<span class="${k <= i ? 'on' : ''}"></span>`).join('');
+    const pos = Math.min(hrs, BODY_MAX_H);
+    // 区間ごとに均等幅なので、マーカー位置も区間内で補間
+    const edges = BODY.map(x => x.h).concat(BODY_MAX_H);
+    const segIdx = Math.min(i, BODY.length-1), lo = edges[segIdx], hi = edges[segIdx+1];
+    const pct = ((segIdx + Math.min(1, (pos - lo) / (hi - lo))) / BODY.length) * 100;
+    const eatingNow = p.kind !== 'fast' && i === 0;
+    $('bodyCard').style.setProperty('--c', b.c);
+    $('bodyCard').innerHTML = `
+      <div class="head"><h2 style="margin:0">からだの中</h2>
+        <span class="elapsed">最後の食事から <b>${fmtDur(now - since)}</b></span></div>
+      <div class="state" style="color:${b.c}">${b.icon} ${b.name}</div>
+      <p class="what">${b.what}</p>
+      <div class="btrack">${seg}<i class="mk" style="left:${pct}%"></i></div>
+      <div class="bscale"><span>0h</span><span>4h</span><span>8h</span><span>12h</span><span>14h</span><span>16h+</span></div>
+      <div class="bcomment">💬 ${tip}</div>
+      ${nx && !eatingNow ? `<div class="bnext">あと <b>${fmtDur(since.getTime() + nx.h*3600000 - now)}</b> で「${nx.icon} ${nx.name}」</div>` : ''}
+      <div class="bnote">※ 時間は一般的な目安です。前日の食事や運動量、体質で前後します。</div>`;
   }
 
   function renderAll(){ renderHome(); renderRec(); renderSet(); }
