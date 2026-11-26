@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.7</title>
+<title>ファスティング信号 v0.8</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -126,6 +126,21 @@
   ul.hints{margin:4px 0 0;padding-left:18px;font-size:13px;line-height:1.6}
   .chip{display:inline-block;font-size:12px;padding:3px 8px;border-radius:99px;background:#273449;color:var(--sub);margin-left:4px}
   .chip.adj{background:#713f12;color:#fde68a}
+  .chip.feast{background:#7c2d12;color:#fed7aa}
+  /* 会食 */
+  .feast{background:#24170b;border:1px solid #a16207;border-radius:12px;padding:12px;margin-top:10px;font-size:14px}
+  .feast .ft{font-weight:700;color:#fde68a}
+  .feast ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7;color:#e2e8f0}
+  .feast p{margin:8px 0 0;font-size:13px;color:#e2e8f0}
+  .feast .row{margin-top:8px}
+  .fgrp{font-size:12px;color:var(--sub);margin:10px 0 4px}
+  .fitem{display:flex;align-items:center;gap:8px;background:#0b1222;border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:13px;margin-top:6px}
+  .fitem.ok{border-color:#166534}.fitem.mid{border-color:#a16207}.fitem.ng{border-color:#7f1d1d}
+  .fitem .nm{flex:1;min-width:0}
+  .fitem .nm span{display:block;font-size:11px;color:var(--sub)}
+  .fitem button{padding:4px 12px;font-size:15px;border-radius:99px}
+  .fitem b{min-width:20px;text-align:center}
+  .ftotal{margin-top:10px;font-size:14px}
 
   .banner{border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:14px}
   .banner.up{background:#14532d}
@@ -197,6 +212,7 @@
       <div class="row" style="margin-top:8px">
         <button class="sm" id="btnHoliday">休日扱い</button>
         <button class="sm" id="btnAdjust">🔄 調整日</button>
+        <button class="sm" id="btnFeast">🍕 会食</button>
       </div>
     </div>
   </div>
@@ -359,6 +375,21 @@
   </div>
 </dialog>
 
+<!-- 会食 -->
+<dialog id="dlgFeast">
+  <h3 style="margin-top:0">🍕 会食の予定</h3>
+  <p class="sub">会食・飲み会の日を入れておくと、その日の食事時間を会食に合わせ、当日と翌日にやることを案内します。調整日として扱うので連続記録は途切れません。</p>
+  <label>日付</label><input id="fDate" type="date">
+  <label>開始</label><input id="fStart" type="time">
+  <label>終了（見込み）</label><input id="fEnd" type="time">
+  <div class="sub" id="fNote" style="margin-top:10px;line-height:1.7"></div>
+  <div class="row" style="margin-top:14px;justify-content:flex-end">
+    <button id="fClear">予定を消す</button>
+    <button id="fCancel">閉じる</button>
+    <button id="fSave" class="primary">保存</button>
+  </div>
+</dialog>
+
 <!-- 開始時チェック -->
 <dialog id="dlgSafety">
   <h3 style="margin-top:0">はじめる前に</h3>
@@ -420,13 +451,15 @@
     const w = d.getDay(); return w === 0 || w === 6;
   }
   // 食事時間（分）。終了時刻から段階に応じて開始を逆算
+  function baseWindow(d){
+    const end = toMin(isHoliday(d) ? S.settings.holidayEnd : S.settings.weekdayEnd);
+    return {start:Math.max(0, end - (24 - FAST_H[S.settings.stage]) * 60), end};
+  }
   function windowOf(d){
-    const x = peek(ymd(d));
-    if (x.adjust) return {start:toMin(x.adjust.start), end:toMin(x.adjust.end), adjust:true, holiday:isHoliday(d)};
-    const hol = isHoliday(d);
-    const end = toMin(hol ? S.settings.holidayEnd : S.settings.weekdayEnd);
-    const start = Math.max(0, end - (24 - FAST_H[S.settings.stage]) * 60);
-    return {start, end, adjust:false, holiday:hol};
+    const x = peek(ymd(d)), feast = x.feast || null;
+    if (x.adjust) return {start:toMin(x.adjust.start), end:toMin(x.adjust.end), adjust:true, holiday:isHoliday(d), feast};
+    const b = baseWindow(d);
+    return {start:b.start, end:b.end, adjust:false, holiday:isHoliday(d), feast};
   }
 
   // ---------- phase ----------
@@ -462,12 +495,17 @@
     const w = p.w;
     $('window').innerHTML = `今日の食事 <b>${fromMin(w.start)}–${fromMin(w.end)}</b><br>`
       + `<span class="chip" style="margin-left:0">${w.holiday ? '休日' : '平日'}</span>`
-      + (w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`)
+      + (w.feast ? `<span class="chip feast">🍕 会食 ${w.feast.start}</span>`
+        : d.recShift ? '<span class="chip feast">🔁 リカバリー</span>'
+        : w.adjust ? '<span class="chip adj">調整日</span>' : `<span class="chip">第${S.settings.stage}段階</span>`)
+      + (feastOf(addDays(now, 1)) ? '<span class="chip feast">🍕 明日会食</span>' : '')
       + (d.train ? '<span class="chip">💪 筋トレ日</span>' : '')
       + (diet() === 'keto' ? '<span class="chip">🥑 ケトン</span>' : '');
     $('btnHoliday').classList.toggle('on', w.holiday);
     $('btnHoliday').textContent = w.holiday ? '休日扱い ✓' : '休日扱い';
-    $('btnAdjust').classList.toggle('on', w.adjust);
+    $('btnAdjust').classList.toggle('on', w.adjust && !w.feast);
+    $('btnFeast').classList.toggle('on', !!w.feast);
+    $('btnFeast').textContent = w.feast ? '🍕 会食 ✓' : '🍕 会食';
 
     renderBody(now, p);
     renderTodo(now, p, d);
@@ -493,6 +531,8 @@
       return `<li><span>🍽 ${typeof m === 'string' ? m
         : `${m.t} ${esc(slotName(m.slot))}${m.food ? '：' + esc(m.food) : ''}`}${adj ? ` <span class="sub">⚖️ 調整済み・タンパク質${adjNutr(r, m.q)[1]}g</span>` : ''}</span>
         <span>${r ? `<button class="del" data-mq="${i}">量</button>` : ''}${del('meal:'+i)}</span></li>`; });
+    if (d.feast && Object.keys(d.feast.items || {}).length)
+      rows.push(`<li><span>🍕 会食：${esc(feastSummary(d.feast))} <span class="sub">糖質 約${feastNutr(d.feast)[0]}g</span></span></li>`);
     if (d.water)  rows.push(`<li><span>💧 水分 ${d.water}回</span>${del('water','−1')}</li>`);
     if (d.cond)   rows.push(`<li><span>体調 ${d.cond}</span>${del('cond')}</li>`);
     if (d.weight) rows.push(`<li><span>体重 ${d.weight} kg</span>${del('weight')}</li>`);
@@ -509,6 +549,58 @@
     snack: ['素焼きナッツひとつかみ','チーズ','ゆで卵','アボカド半分','無糖プロテイン'],
     drink: ['水','白湯','緑茶・麦茶','ブラックコーヒー','無糖の炭酸水'],
   };
+  // ---- 会食：よく出るものの目安（1単位あたり [糖質g, タンパク質g, 脂質g, kcal]・成分表と一般的な量をもとにした概算） ----
+  // lv：ok＝気にせず食べてOK／mid＝少しだけ／ng＝できれば避ける
+  const FEAST_ITEMS = [
+    {id:'meat',    name:'焼き鳥（塩）・肉料理', unit:'1本〜1皿', n:[1,12,8,130], lv:'ok'},
+    {id:'fish',    name:'刺身・焼き魚', unit:'1皿', n:[1,15,5,110], lv:'ok'},
+    {id:'salad',   name:'サラダ・枝豆・冷奴', unit:'1皿', n:[3,5,5,80], lv:'ok'},
+    {id:'cheese',  name:'チーズ・ナッツ・生ハム', unit:'小皿', n:[2,7,12,150], lv:'ok'},
+    {id:'hb',      name:'ハイボール・焼酎・ウイスキー', unit:'1杯', n:[0,0,0,90], lv:'ok'},
+    {id:'karaage', name:'唐揚げ', unit:'1個', n:[3,5,5,75], lv:'mid'},
+    {id:'wine',    name:'ワイン（辛口）', unit:'グラス1杯', n:[2,0,0,90], lv:'mid'},
+    {id:'pizza',   name:'ピザ', unit:'1切れ（M 1/8）', n:[20,6,6,170], lv:'ng'},
+    {id:'fries',   name:'フライドポテト', unit:'10本', n:[12,1,5,95], lv:'ng'},
+    {id:'beer',    name:'ビール', unit:'中ジョッキ1杯', n:[11,1,0,140], lv:'ng'},
+    {id:'sour',    name:'甘いお酒（サワー・梅酒・カクテル）', unit:'1杯', n:[15,0,0,150], lv:'ng'},
+    {id:'rice',    name:'〆のごはん・麺・パスタ', unit:'1杯', n:[55,4,1,240], lv:'ng'},
+    {id:'sweet',   name:'デザート・甘い物', unit:'1皿', n:[30,3,10,230], lv:'ng'},
+  ];
+  const FEAST_BY = Object.fromEntries(FEAST_ITEMS.map(x => [x.id, x]));
+  const FEAST_LV = {ok:'🙆 たくさん食べてOK', mid:'⚠️ 少しだけ', ng:'🙅 できれば避ける（食べるなら1〜2個まで）'};
+  const FEAST_TIPS = {
+    before:['会食までの食事は軽めに。卵・肉・魚・豆腐などタンパク質中心で、主食は抜く','ただし最初の一食は抜かない（空腹すぎるとピザ・ポテトに手が伸びやすい）','出かける前に水をコップ1〜2杯'],
+    during:['最初にサラダ・肉・刺身を自分の取り皿に取る（大皿からつままない）','ピザは1〜2切れまで。耳を残すとさらに糖質オフ','ポテトは数本だけ。ピザとどちらか一方に絞る','お酒はハイボール・焼酎・辛口ワイン。1杯ごとに水を1杯','〆のごはん・麺・デザートはパス'],
+  };
+  const recoverTips = () => diet() === 'keto'
+    ? ['今日は糖質を普段より厳しめに（20g以下がめやす）','水分と塩分をしっかり（だるさ・頭痛の予防）','体重が1〜2kg増えていても、ほとんどは糖と一緒にたまった水分。2〜3日で戻ります','歩く・筋トレなど体を動かすと、たまった糖が早く使われてケトン燃焼に戻りやすい']
+    : ['今日は主食を少なめにして、タンパク質と野菜を多めに','水分をしっかり','体重が増えていても、多くは水分。2〜3日で戻ります'];
+  const feastOf = dt => peek(ymd(dt)).feast || null;
+  function feastNutr(f){
+    const sum = [0,0,0,0];
+    Object.entries((f && f.items) || {}).forEach(([id, c]) => { const it = FEAST_BY[id]; if (it) it.n.forEach((v,k) => sum[k] += v * c); });
+    return sum.map(Math.round);
+  }
+  const feastSummary = f => Object.entries(f.items || {}).filter(([id, c]) => c > 0 && FEAST_BY[id])
+    .map(([id, c]) => `${FEAST_BY[id].name.replace(/（.*）/, '').split('・')[0]}${c}`).join('・');
+  const feastTips = (title, tips, extra = '') => `<div class="feast"><div class="ft">${title}</div><ul>${tips.map(t => `<li>${t}</li>`).join('')}</ul>${extra}</div>`;
+  let feastOpen = false;   // 会食後の「食べたもの」を開いているか
+  function feastCounter(f, title, fold = false){
+    const items = f.items || {}, n = feastNutr(f), keto = diet() === 'keto';
+    const mark = !keto ? '' : n[0] <= 30 ? ' 🟢' : n[0] <= 60 ? ' 🟡' : ' 🔴';
+    if (fold && !feastOpen) return `<div class="feast"><div class="row" style="justify-content:space-between;margin:0">
+      <span class="ft">${title}</span><button class="sm" data-ftoggle="1">${Object.keys(items).length ? '編集' : '記録する'}</button></div>
+      <p>${Object.keys(items).length ? `${esc(feastSummary(f))}：糖質 <b>${n[0]}g</b>${mark}` : 'まだ入力していません'}</p></div>`;
+    const grp = lv => `<div class="fgrp">${FEAST_LV[lv]}</div>` + FEAST_ITEMS.filter(x => x.lv === lv).map(x =>
+      `<div class="fitem ${x.lv}"><div class="nm">${esc(x.name)}<span>${x.unit}・糖質${x.n[0]}g</span></div>
+        <button data-fi="${x.id}" data-fd="-1">−</button><b>${items[x.id] || 0}</b><button data-fi="${x.id}" data-fd="1">＋</button></div>`).join('');
+    return `<div class="feast"><div class="ft">${title}</div>${['ok','mid','ng'].map(grp).join('')}
+      <div class="ftotal">会食の合計：糖質 <b>${n[0]}g</b>${mark}・タンパク質 ${n[1]}g・${n[3]}kcal</div>
+      <p class="sub" style="color:var(--sub)">食べた分だけ＋（概算）。「今日の栄養」にも反映されます</p>
+      ${fold ? '<div class="row" style="justify-content:flex-end"><button class="sm" data-ftoggle="1">閉じる</button></div>' : ''}</div>`;
+  }
+  // 会食の終わりから16時間後（翌日の分）
+  const recMin = f => Math.max(0, toMin(f.end) + 16*60 - 24*60);
   const KETO_NG = ['ごはん・パン・麺','芋・かぼちゃ・とうもろこし','果物・甘い物','砂糖入りのたれ・ケチャップ','衣の多い揚げ物'];
   const PRINCIPLES = {
     normal:{
@@ -516,13 +608,15 @@
       first:'空腹の胃にやさしく。温かい汁物＋タンパク質から始め、揚げ物・大盛り・甘い物からは始めない。',
       lunch:'主食・主菜・副菜がそろう「定食型」を選べばOK。迷ったら魚か鶏の定食。',
       dinner:'タンパク質のおかず＋野菜が中心。ごはんは普通盛りまで。食事終了の30分前までに食べ終える。',
-      snack:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。'},
+      snack:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。',
+      feast:'楽しむのが最優先。タンパク質と野菜を先にとり、主食・甘い物・甘いお酒は少なめに。翌日の食事でととのえればOK。'},
     keto:{
       fast:'飲み物だけで過ごします。水分はたっぷり。だるさ・頭痛が出たら、水に塩をひとつまみ入れて塩分も補給。',
       first:'卵・肉・魚・豆腐＋野菜で、糖質ゼロに近い組み合わせに。ごはん・パン・果物は入れない。',
       lunch:'外食は「ごはん抜き・おかず多め」で注文。丼・麺・パン・カレーは避ける。',
       dinner:'タンパク質＋葉物・きのこ＋油（オリーブオイル・バター）で満腹に。〆の主食はなし。',
-      snack:'ナッツ・チーズ・卵など糖質の少ないものだけ。甘い物・果物・せんべいは避ける。'},
+      snack:'ナッツ・チーズ・卵など糖質の少ないものだけ。甘い物・果物・せんべいは避ける。',
+      feast:'1回の会食で崩れても、翌日すぐ戻せば大丈夫。肉・魚・サラダを先に取り、ピザ・ポテト・〆・甘いお酒は少しだけに。'},
   };
   const DEFAULT_MENUS = {
     first: ['味噌汁＋ゆで卵＋おにぎり','ヨーグルト＋バナナ＋ゆで卵','納豆ごはん＋味噌汁','サラダチキン＋野菜スープ＋おにぎり','豆腐とわかめの味噌汁＋鮭おにぎり'],
@@ -538,6 +632,7 @@
     lunch: {label:'昼食', principle:'主食・主菜・副菜がそろう「定食型」を選べばOK。迷ったら魚か鶏の定食。'},
     dinner:{label:'夕食', principle:'タンパク質のおかず＋野菜が中心。ごはんは普通盛りまで。食事終了の30分前までに食べ終える。'},
     snack: {label:'間食', principle:'食事時間内ならOK。甘いお菓子よりタンパク質系（卵・ヨーグルト・ナッツ）を選ぶ。'},
+    feast: {label:'🍕 会食', principle:''},
   };
   const diet = () => S.settings.diet === 'normal' ? 'normal' : 'keto';
   const baseMenus = () => diet() === 'keto' ? KETO_MENUS : DEFAULT_MENUS;
@@ -732,9 +827,11 @@
   function dayNutr(d){
     const sum = [0,0,0,0]; let unknown = 0;
     (d.meals || []).forEach(m => {
+      if (typeof m === 'object' && m.slot === 'feast') return;   // 会食は下で品目ごとに数える
       const r = typeof m === 'object' && recipe(m.food);
       if (r) adjNutr(r, m.q).forEach((v,i) => sum[i] += v); else unknown++;
     });
+    if (d.feast) feastNutr(d.feast).forEach((v,i) => sum[i] += v);
     return {sum, unknown};
   }
   function latestWeight(){
@@ -878,6 +975,12 @@
       L.push({id:'lunch', t:12*60, icon:'🍱', name:'昼食', cat:'lunch', meal:true});
     if (e - s >= 4*60)
       L.push({id:'dinner', t:dinnerT, icon:'🍲', name:'夕食', cat:'dinner', meal:true});
+    if (w.feast){   // 会食の前後2時間以内の食事は会食に置きかえる
+      const ft = toMin(w.feast.start);
+      for (let i = L.length - 1; i >= 0; i--) if (L[i].meal && Math.abs(L[i].t - ft) < 120) L.splice(i, 1);
+      L.push({id:'feast', t:ft, icon:'🍕', name:'会食', cat:'feast', meal:true});
+      L.sort((a, b) => a.t - b.t);
+    }
     L.push({id:'end', t:e, icon:'🔵', name:'食事終了 → ファスティング開始', cat:'fast',
             desc:'ここからは水・お茶だけ。歯みがきをして「食事終わり」の合図に'});
     L.push({id:'review', t:Math.min(e + 90, 23*60 + 30), icon:'🌙', name:'今日のふりかえり', cat:'fast',
@@ -886,7 +989,7 @@
   }
   function slotName(id){
     const s = slotsOf(windowOf(new Date())).find(x => x.id === id);
-    return s ? s.name.replace(/（.*）/, '') : ({first:'最初の一食',lunch:'昼食',dinner:'夕食',snack:'間食'}[id] || '');
+    return s ? s.name.replace(/（.*）/, '') : ({first:'最初の一食',lunch:'昼食',dinner:'夕食',snack:'間食',feast:'会食'}[id] || '');
   }
   const eaten = (d, id) => (d.meals || []).some(m => typeof m === 'object' && m.slot === id);
 
@@ -910,9 +1013,10 @@
   function renderTodo(now, p, d){
     const nm = now.getHours()*60 + now.getMinutes();
     const w = p.w, slots = slotsOf(w), meals = slots.filter(s => s.meal);
-    let lead = '次にやること', title = '', body = '', food = null, actions = '';
+    let lead = '次にやること', title = '', body = '', food = null, actions = '', live = false;
 
     const foodBox = (slot, label) => {
+      if (slot.id === 'feast') return {slot, f:'', html:feastTips(`🍕 ${w.feast.start}〜 会食での食べ方`, FEAST_TIPS.during)};
       const f = suggest(slot.cat), tip = trainTip(d, slot.cat);
       const r = recipe(f), a = (d.adj || {})[slot.cat], q = a && a.food === f ? a.q : null;
       return {slot, f, html:`<div class="food"><div class="sub">${label}</div><div class="fname">${esc(f)}</div>
@@ -938,7 +1042,12 @@
       const cur = [...meals].reverse().find(s => s.t <= nm) || meals[0];
       const nextMeal = meals.find(s => s.t > nm && !eaten(d, s.id));
       const left = w.end - nm;
-      if (!eaten(d, cur.id)){
+      if (cur.id === 'feast' && !eaten(d, 'feast')){
+        live = true;
+        title = p.kind === 'soon' ? `🟡 あと${left}分で食事終了。会食を楽しんで` : `🍕 会食の時間です（〜${w.feast.end}）`;
+        food = {html:feastTips('この順で選ぶと安心', FEAST_TIPS.during) + feastCounter(w.feast, '食べたものを＋で記録')};
+        actions = `<div class="row"><button class="primary" data-eat="feast" data-food="">会食を終えた</button></div>`;
+      } else if (!eaten(d, cur.id)){
         title = p.kind === 'soon' ? `🟡 あと${left}分で終了。${cur.name}を今のうちに` : `🍽 今は${cur.name}の時間です`;
         food = foodBox(cur, '今日のおすすめ');
         actions = `<div class="row"><button class="primary" data-eat="${cur.id}" data-food="${esc(food.f)}">これを食べた</button>
@@ -963,8 +1072,34 @@
         food = {html:`<div class="food"><div class="sub">明日の${tfirst.name}のおすすめ</div><div class="fname">${esc(suggest('first', tm))}</div></div>`};
       }
     }
+    // ---- 会食の前・当日・翌日 ----
+    let pre = '', post = '';
+    const f = w.feast, tf = feastOf(addDays(now, 1)), yf = feastOf(addDays(now, -1));
+    if (f){
+      if (nm < toMin(f.start)) pre += feastTips(`🍕 今日は ${f.start}〜 会食。それまでに`, FEAST_TIPS.before);
+      else if (!live) post += feastCounter(f, '🍕 会食で食べたもの', true);
+      if (nm >= w.end){
+        const tw = windowOf(addDays(now, 1)), r = recMin(f);
+        pre += feastTips('🔁 明日はリカバリー日', [
+          r > tw.start ? `最初の一食は <b>${fromMin(r)}</b> 以降がおすすめ（会食の終わりから16時間）。明日の朝、ずらすボタンを出します`
+                       : `明日はいつもの <b>${fromMin(tw.start)}</b> からでOK（会食から16時間以上空きます）`,
+          '寝る前に水をコップ1杯']);
+      }
+    } else if (tf && nm < w.end){
+      pre += `<div class="feast"><div class="ft">🍕 明日 ${tf.start}〜 会食の予定</div><p>今日は普段どおりでOK。前日に食事を減らして調整する必要はありません。</p></div>`;
+    }
+    if (yf && nm < w.end){
+      const r = recMin(yf), c = Object.keys(yf.items || {}).length ? feastNutr(yf)[0] : null;
+      let shift = '';
+      if (d.recShift) shift = `<p>最初の一食を <b>${fromMin(w.start)}</b> にずらしました。</p><div class="row"><button class="sm" id="recUndo">元に戻す</button></div>`;
+      else if (!w.adjust && r > w.start && r <= w.end - 180 && nm < r)
+        shift = `<p>会食の終わり（${yf.end}）から16時間空けるなら、最初の一食は <b>${fromMin(r)}</b> 以降。</p>
+          <div class="row"><button class="sm" id="recShift" data-s="${fromMin(r)}" data-e="${fromMin(w.end)}">最初の一食を ${fromMin(r)} にする</button></div>`;
+      else if (r <= w.start) shift = `<p>いつもの時間（${fromMin(w.start)}〜）で、会食から16時間以上空きます。</p>`;
+      pre += feastTips(`🔁 今日はリカバリー日（昨日は会食${c !== null ? `・糖質 約${c}g` : ''}）`, recoverTips(), shift);
+    }
     $('todo').innerHTML = `<div class="lead">${lead}</div><div class="title">${title}</div>`
-      + (body ? `<div class="body">${body}</div>` : '') + (food ? food.html : '') + actions;
+      + (body ? `<div class="body">${body}</div>` : '') + pre + (food ? food.html : '') + actions + post;
   }
 
   // ---- 今日の流れ ----
@@ -976,7 +1111,8 @@
       const cls = [i < curIdx ? 'past' : '', i === curIdx ? 'cur' : '', done ? 'done' : '', s.meal ? 'meal' : ''].join(' ');
       const m = s.meal && (d.meals || []).find(x => typeof x === 'object' && x.slot === s.id);
       const desc = s.meal
-        ? (m ? `✅ ${m.t} 記録済み${m.food ? '：' + esc(m.food) : ''}` : `おすすめ：${esc(suggest(s.cat))}`)
+        ? (m ? `✅ ${m.t} 記録済み${m.food ? '：' + esc(m.food) : ''}`
+             : s.id === 'feast' ? `${w.feast.start}〜${w.feast.end}・食べ方は「次にやること」に表示` : `おすすめ：${esc(suggest(s.cat))}`)
         : s.desc;
       return `<li class="${cls}" ${s.meal ? `data-slot="${s.id}"` : ''}>
         <div class="t">${s.notime ? '朝' : fromMin(s.t)}${i === curIdx ? '<span class="here">いまここ</span>' : ''}</div>
@@ -997,7 +1133,11 @@
     const M = menus();
     let h = `<p class="principle">${principle(cat)}</p>`;
     if (diet() === 'keto') h = `<p class="principle" style="color:var(--green)">🥑 ケトン重視：糖質は1日30〜50g以下（おにぎり1個 ≒ 40g）</p>` + h;
-    if (cat === 'fast'){
+    if (cat === 'feast'){
+      h += ['ok','mid','ng'].map(lv => `<div class="sub" style="margin-top:10px">${FEAST_LV[lv]}</div><div class="pills">${FEAST_ITEMS.filter(x => x.lv === lv)
+        .map(x => `<span class="pill${lv === 'ng' ? ' ng' : ''}">${esc(x.name)} <span class="sub">糖質${x.n[0]}g／${x.unit}</span></span>`).join('')}</div>`).join('')
+        + `<p class="sub" style="margin-bottom:0">上の「🍕 会食」から予定を入れておくと、当日の食べ方と翌日のリカバリーを案内します</p>`;
+    } else if (cat === 'fast'){
       h += `<div class="sub" style="margin-top:10px">🙆 飲んでOK</div><div class="pills">${M.drink.map(x => `<span class="pill">${esc(x)}</span>`).join('')}</div>`
         +  `<div class="sub" style="margin-top:10px">🙅 避ける</div><div class="pills">${DRINK_NG.map(x => `<span class="pill ng">${esc(x)}</span>`).join('')}</div>`;
     } else {
@@ -1159,7 +1299,10 @@
     // コメントは時間帯ごとに日替わりで（同じ日は同じ文）
     const seed = now.getDate() + i;
     let tip = b.tips[seed % b.tips.length];
-    if (keto && i >= 2 && i <= 3) tip += 'ケトン重視の食事なので、糖のストックが少なく切り替えが早めに進みやすいです。';
+    const yf = feastOf(addDays(now, -1));
+    const feastCarb = yf && (Object.keys(yf.items || {}).length ? feastNutr(yf)[0] > 30 : true);
+    if (keto && i >= 2 && feastCarb && p.kind === 'fast') tip += '昨日の会食で糖をとったので、ここから先の段階は普段より数時間遅れることがあります。今日の糖質を控えれば2〜3日で戻ります。';
+    else if (keto && i >= 2 && i <= 3) tip += 'ケトン重視の食事なので、糖のストックが少なく切り替えが早めに進みやすいです。';
     const seg = BODY.map((x,k) => `<span class="${k <= i ? 'on' : ''}"></span>`).join('');
     const pos = Math.min(hrs, BODY_MAX_H);
     // 区間ごとに均等幅なので、マーカー位置も区間内で補間
@@ -1215,6 +1358,15 @@
   }
   $('todo').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.fi){
+      const d = day(todayKey()); if (!d.feast) return;
+      const it = d.feast.items = d.feast.items || {}, v = Math.max(0, (it[b.dataset.fi] || 0) + Number(b.dataset.fd));
+      if (v) it[b.dataset.fi] = v; else delete it[b.dataset.fi];
+      save(); renderHome(); return;
+    }
+    if (b.dataset.ftoggle){ feastOpen = !feastOpen; renderHome(); return; }
+    if (b.id === 'recShift') return withUndo(`最初の一食を ${b.dataset.s} にしました`, d => { d.adjust = {start:b.dataset.s, end:b.dataset.e}; d.recShift = true; });
+    if (b.id === 'recUndo') return withUndo('いつもの時間に戻しました', d => { delete d.adjust; delete d.recShift; });
     if (b.dataset.recipe) openRecipe(b.dataset.recipe, b.dataset.cat ? {cat:b.dataset.cat} : null);
     else if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
     else if (b.dataset.pick) openPick(b.dataset.pick, b.dataset.slot);
@@ -1352,6 +1504,59 @@
     save(); $('dlgAdjust').close(); toast('今日を調整日にしました'); renderAll();
   };
 
+  // 会食
+  const mdw = k => { const dt = new Date(k + 'T00:00'); return `${dt.getMonth()+1}/${dt.getDate()}(${'日月火水木金土'[dt.getDay()]})`; };
+  function openFeast(key){
+    const f = peek(key).feast;
+    $('fDate').value = key; $('fStart').value = f ? f.start : '19:00'; $('fEnd').value = f ? f.end : '21:30';
+    renderFeastNote(); $('dlgFeast').showModal();
+  }
+  function renderFeastNote(){
+    const k = $('fDate').value, s = $('fStart').value, e = $('fEnd').value;
+    let h = '';
+    if (k && s && e && toMin(e) > toMin(s)){
+      const b = baseWindow(new Date(k + 'T00:00')), ns = Math.min(b.start, toMin(s)), ne = Math.max(b.end, toMin(e));
+      h += `この日の食事時間：<b>${fromMin(ns)}–${fromMin(ne)}</b>${ns !== b.start || ne !== b.end ? `（いつもは ${fromMin(b.start)}–${fromMin(b.end)}）` : ''}<br>`
+        +  `翌日の最初の一食のめやす：<b>${fromMin(recMin({end:e}))}</b> 以降（16時間空ける場合）`;
+    }
+    const up = Object.keys(S.days).filter(x => x >= todayKey() && S.days[x].feast).sort();
+    if (up.length) h += `<br>登録済みの会食：${up.map(x => `${mdw(x)} ${S.days[x].feast.start}`).join('、')}`;
+    $('fNote').innerHTML = h;
+  }
+  function clearFeast(d){
+    if ('feastAdj' in d){ if (d.feastAdj) d.adjust = d.feastAdj; else delete d.adjust; delete d.feastAdj; }
+    if (d.feastStatus){ if (d.status === 'adjust') delete d.status; delete d.feastStatus; }
+    delete d.feast;
+  }
+  $('btnFeast').onclick = () => {
+    const up = Object.keys(S.days).filter(x => x >= todayKey() && S.days[x].feast).sort();
+    openFeast(up[0] || todayKey());
+  };
+  $('fDate').onchange = () => {
+    const f = peek($('fDate').value).feast;
+    if (f){ $('fStart').value = f.start; $('fEnd').value = f.end; }
+    renderFeastNote();
+  };
+  $('fStart').onchange = $('fEnd').onchange = renderFeastNote;
+  $('fCancel').onclick = () => $('dlgFeast').close();
+  $('fClear').onclick = () => {
+    const k = $('fDate').value;
+    if (!peek(k).feast){ toast('この日の会食の予定はありません'); return; }
+    clearFeast(day(k)); save(); $('dlgFeast').close(); toast('会食の予定を消しました'); renderAll();
+  };
+  $('fSave').onclick = () => {
+    const k = $('fDate').value, s = $('fStart').value, e = $('fEnd').value;
+    if (!k || !s || !e || toMin(e) <= toMin(s)) { toast('終了は開始より後にしてください（日付をまたがない時刻で）'); return; }
+    const d = day(k), items = (d.feast || {}).items || {};
+    clearFeast(d);
+    const b = d.adjust ? {start:toMin(d.adjust.start), end:toMin(d.adjust.end)} : baseWindow(new Date(k + 'T00:00'));
+    const ns = Math.min(b.start, toMin(s)), ne = Math.max(b.end, toMin(e));
+    d.feast = {start:s, end:e, items};
+    if (ns !== b.start || ne !== b.end){ d.feastAdj = d.adjust ? Object.assign({}, d.adjust) : null; d.adjust = {start:fromMin(ns), end:fromMin(ne)}; }
+    if (!d.status){ d.status = 'adjust'; d.feastStatus = true; }
+    save(); $('dlgFeast').close(); toast(`🍕 ${mdw(k)} ${s}〜 の会食を登録しました`); renderAll();
+  };
+
   // カレンダー
   $('calPrev').onclick = () => { calMonth.setMonth(calMonth.getMonth()-1); renderRec(); };
   $('calNext').onclick = () => { calMonth.setMonth(calMonth.getMonth()+1); renderRec(); };
@@ -1424,6 +1629,8 @@
       {t:at(today, w.start-30), id:'s', title:'🟢 30分後に食事時間', body:`${fromMin(w.start)}から食事OKです`},
       {t:at(today, w.end-30),   id:'e', title:'🟡 食事終了30分前', body:`${fromMin(w.end)}までに食事を終えましょう`},
     ];
+    if (w.feast) events.push({t:at(today, toMin(w.feast.start) - 30), id:'f', title:'🍕 30分後に会食',
+      body:'サラダ・肉から。ピザ・ポテトは少しだけ、お酒はハイボールに'});
     const p = phaseNow(now);
     if (p.kind === 'fast' && now.getHours() >= 8 && now.getHours() <= 22 && now.getHours() % 2 === 0){
       events.push({t:at(today, now.getHours()*60), id:'w'+now.getHours(), title:'💧 水分補給', body:'水やお茶を一杯どうぞ'});
