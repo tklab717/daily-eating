@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.8.4</title>
+<title>ファスティング信号 v0.8.5</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -347,7 +347,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.8.4</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.8.5</p>
 </section>
 </main>
 
@@ -1030,11 +1030,20 @@
       : '💪 筋トレ日：タンパク質のおかず（卵・肉・魚・豆腐）を1品追加';
   }
 
+  // ---- 食事時間のあとでも記録できるように ----
+  function lateBox(meals, d, key, pre = ''){
+    const miss = meals.filter(s => !eaten(d, s.id));
+    if (!miss.length) return '';
+    return `<div class="food"><div class="sub">📝 ${pre}記録していない食事があります</div>
+      <div class="tip">食べた時刻を選んで、あとから記録できます</div>
+      <div class="row">${miss.map(s => `<button class="more" data-late="${s.id}" data-lcat="${s.cat}" data-lkey="${key}">${s.icon} ${esc(s.name.replace(/（.*）/, ''))}を記録</button>`).join('')}</div></div>`;
+  }
+
   // ---- 次にやること ----
   function renderTodo(now, p, d){
     const nm = now.getHours()*60 + now.getMinutes();
     const w = p.w, slots = slotsOf(w), meals = slots.filter(s => s.meal);
-    let lead = '次にやること', title = '', body = '', food = null, actions = '', live = false;
+    let lead = '次にやること', title = '', body = '', food = null, actions = '', live = false, lateTop = '', lateEnd = '';
 
     const foodBox = (slot, label) => {
       if (slot.id === 'feast') return {slot, f:'', html:feastTips(`🍕 ${w.feast.start}〜 会食での食べ方`, FEAST_TIPS.during)};
@@ -1050,6 +1059,10 @@
 
     if (nm < w.start){
       const until = w.start - nm, first = meals[0];
+      if (nm < 4*60){   // 深夜：昨日の食事の記録し忘れ
+        const y = addDays(now, -1);
+        lateTop = lateBox(slotsOf(windowOf(y)).filter(s => s.meal), peek(ymd(y)), ymd(y), '昨日の');
+      }
       if (until > 30){
         title = '💧 飲み物だけで過ごす時間です';
         body = `次は <b>${fromMin(w.start)}</b> の${first.name}。それまではこれを飲んでOK：${drinks}`;
@@ -1083,6 +1096,7 @@
       }
     } else {
       const tm = addDays(now, 1), tw = windowOf(tm), tfirst = slotsOf(tw).find(s => s.meal);
+      lateEnd = lateBox(meals, d, todayKey());
       if (!d.status){
         title = '🌙 ファスティング開始！ 寝る前にふりかえり';
         body = `下の「今日のふりかえり」を1タップして1日を締めくくりましょう。<br>明日は <b>${fromMin(tw.start)}</b> から${tfirst.name}。`;
@@ -1094,7 +1108,7 @@
       }
     }
     // ---- 会食の前・当日・翌日 ----
-    let pre = '', post = '';
+    let pre = lateTop, post = lateEnd;
     const f = w.feast, tf = feastOf(addDays(now, 1)), yf = feastOf(addDays(now, -1));
     if (f){
       if (nm < toMin(f.start)) pre += feastTips(`🍕 今日は ${f.start}〜 会食。それまでに`, FEAST_TIPS.before);
@@ -1359,8 +1373,8 @@
     tt = setTimeout(() => t.classList.remove('show','undo'), undo ? 5000 : 1600);
   }
   // 今日の記録を変更する前の状態を覚えておき、「取り消す」で戻す
-  function withUndo(msg, change){
-    const key = todayKey(), before = JSON.stringify(peek(key));
+  function withUndo(msg, change, key = todayKey()){
+    const before = JSON.stringify(peek(key));
     change(day(key)); save(); renderAll();
     toast(msg, () => { S.days[key] = JSON.parse(before); save(); renderAll(); });
   }
@@ -1369,7 +1383,7 @@
   const nowHM = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; };
   const todayKey = () => ymd(new Date());
 
-  function logMeal(slot, food, t){
+  function logMeal(slot, food, t, key){
     withUndo(slot === 'snack' ? `🍪 間食「${food}」を記録しました` : '🍽 記録しました', d => {
       d.meals = (d.meals || []).filter(m => slot === 'snack' || !(typeof m === 'object' && m.slot === slot));
       const a = (d.adj || {})[slot], m = {t:t || nowHM(), slot, food};
@@ -1377,7 +1391,7 @@
       d.meals.push(m);
       const tm = x => typeof x === 'object' && /^\d{1,2}:\d{2}$/.test(x.t || '') ? toMin(x.t) : -1;
       d.meals.sort((x, y) => tm(x) - tm(y));   // 時刻順に並べる（あとから記録した間食も正しい位置に）
-    });
+    }, key);
   }
   $('todo').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1392,6 +1406,7 @@
     if (b.id === 'recUndo') return withUndo('いつもの時間に戻しました', d => { delete d.adjust; delete d.recShift; });
     if (b.dataset.recipe) openRecipe(b.dataset.recipe, b.dataset.cat ? {cat:b.dataset.cat} : null);
     else if (b.dataset.eat) logMeal(b.dataset.eat, b.dataset.food);
+    else if (b.dataset.late) openLate(b.dataset.late, b.dataset.lcat, b.dataset.lkey);
     else if (b.dataset.pick) openPick(b.dataset.pick, b.dataset.slot);
     else if (b.dataset.other){
       const pk = peek(todayKey()).pick;
@@ -1404,11 +1419,23 @@
     const li = e.target.closest('li[data-slot]'); if (!li) return;
     const d = day(todayKey()), id = li.dataset.slot;
     if (eaten(d, id)) withUndo('食事の記録を削除しました', d => { d.meals = d.meals.filter(m => !(typeof m === 'object' && m.slot === id)); });
-    else { const s = slotsOf(windowOf(new Date())).find(x => x.id === id); logMeal(id, suggest(s.cat)); }
+    else {
+      const now = new Date(), nm = now.getHours()*60 + now.getMinutes(), w = windowOf(now);
+      const s = slotsOf(w).find(x => x.id === id);
+      if (nm >= w.end || nm < w.start) openLate(id, s.cat, todayKey());
+      else logMeal(id, suggest(s.cat));
+    }
   };
   // ---- ほかのメニューから選ぶ ----
-  let pCat = null, pSlot = null, pSnack = false;
+  let pCat = null, pSlot = null, pSnack = false, pLate = null;
+  function openLate(slot, cat, key){
+    const k = key || todayKey(), s = slotsOf(windowOf(new Date(k + 'T00:00'))).find(x => x.id === slot);
+    pLate = {key:k, t: s ? fromMin(Math.min(s.t, 23*60+59)) : nowHM(), name: s ? s.name.replace(/（.*）/, '') : slotName(slot)};
+    pCat = cat; pSlot = slot; pSnack = false; renderPick(); $('dlgPick').showModal();
+    if (document.activeElement) document.activeElement.blur();
+  }
   function openPick(cat, slot, snack = false){
+    pLate = null;
     pCat = cat; pSlot = slot; pSnack = snack; renderPick(); $('dlgPick').showModal();
     if (snack && document.activeElement) document.activeElement.blur();   // スマホで時刻ピッカーが勝手に開かないように
   }
@@ -1424,6 +1451,12 @@
         + (fasting ? `<p class="sub" style="margin:8px 0 0">🔵 いまはファスティング中です。食べた場合も正直に記録すればOK。「からだの中」はこの時刻から数え直します。</p>` : '')
         + `<div class="pickgrp">一覧にないもの</div>
         <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：せんべい2枚" style="flex:1"><button id="pickFreeOk">記録</button></div>`;
+    } else if (pLate){
+      h = `<h3 style="margin:0 0 4px">📝 ${esc(pLate.name)}を記録${pLate.key !== todayKey() ? '（昨日）' : ''}</h3>
+        <p class="sub" style="margin:0">食べたものをタップすると、その時刻で記録されます</p>
+        <label>食べた時刻</label><input id="pickTime" type="time" value="${pLate.t}">`
+        + `<div class="pickgrp">一覧にないもの</div>
+        <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：豚キムチ炒め" style="flex:1"><button id="pickFreeOk">記録</button></div>`;
     } else h = `<h3 style="margin:0 0 4px">${esc(slotName(pSlot) || labels[pCat])}のメニューを選ぶ</h3>
       <p class="sub" style="margin:0">タップで今日のメニューに設定（ほかの時間帯の定番からも選べます）</p>`;
     order.forEach(k => {
@@ -1435,7 +1468,7 @@
           <div class="s">${r ? `糖質${r.n[0]}g・タンパク質${r.n[1]}g・脂質${r.n[2]}g・${r.n[3]}kcal` : '栄養データなし'}</div></li>`;
       }).join('') + '</ul>';
     });
-    if (!pSnack) h += `<div class="pickgrp">一覧にないもの</div>
+    if (!pSnack && !pLate) h += `<div class="pickgrp">一覧にないもの</div>
       <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：豚キムチ炒め" style="flex:1"><button id="pickFreeOk">決定</button></div>`;
     h += `<div class="row" style="justify-content:flex-end;margin-top:14px"><button id="pickClose">閉じる</button></div>`;
     $('pickBody').innerHTML = h;
@@ -1444,6 +1477,10 @@
     if (pSnack){
       const t = ($('pickTime') && $('pickTime').value) || nowHM();
       $('dlgPick').close(); return logMeal('snack', name, t);
+    }
+    if (pLate){
+      const t = ($('pickTime') && $('pickTime').value) || pLate.t, L = pLate;
+      $('dlgPick').close(); pLate = null; return logMeal(pSlot, name, t, L.key);
     }
     const d = day(todayKey()); d.pick = Object.assign({}, d.pick, {[pCat]: name});
     save(); $('dlgPick').close(); renderHome(); toast(`「${name}」にしました`);
