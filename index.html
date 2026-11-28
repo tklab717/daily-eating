@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="ファスティング">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>ファスティング信号 v0.8.2</title>
+<title>ファスティング信号 v0.8.3</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#f1f5f9; --sub:#94a3b8;
@@ -248,6 +248,7 @@
       <button id="btnWater">💧 水分 +1 <span id="water" class="sub"></span></button>
       <button id="btnTrain">💪 今日は筋トレ日</button>
     </div>
+    <button id="btnSnack" style="width:100%;margin-top:8px;padding:14px 6px">🍪 間食を記録</button>
     <label>体調</label>
     <div class="grid3" id="conds">
       <button data-c="◎">◎ 良い</button>
@@ -346,7 +347,7 @@
     <p class="sub">本アプリは医療アドバイスではありません。めまい・強い空腹感・体調不良を感じたら無理せず食事をとってください。持病・服薬中の方などは医師に相談してください。</p>
     <button id="btnSafety">開始時チェックをもう一度見る</button>
   </div>
-  <p class="sub" style="text-align:center">ファスティング信号 v0.7</p>
+  <p class="sub" style="text-align:center">ファスティング信号 v0.8.3</p>
 </section>
 </main>
 
@@ -1365,12 +1366,14 @@
   const nowHM = () => { const n = new Date(); return `${pad(n.getHours())}:${pad(n.getMinutes())}`; };
   const todayKey = () => ymd(new Date());
 
-  function logMeal(slot, food){
-    withUndo('🍽 記録しました', d => {
+  function logMeal(slot, food, t){
+    withUndo(slot === 'snack' ? `🍪 間食「${food}」を記録しました` : '🍽 記録しました', d => {
       d.meals = (d.meals || []).filter(m => slot === 'snack' || !(typeof m === 'object' && m.slot === slot));
-      const a = (d.adj || {})[slot], m = {t:nowHM(), slot, food};
+      const a = (d.adj || {})[slot], m = {t:t || nowHM(), slot, food};
       if (a && a.food === food){ m.q = a.q; delete d.adj[slot]; }
       d.meals.push(m);
+      const tm = x => typeof x === 'object' && /^\d{1,2}:\d{2}$/.test(x.t || '') ? toMin(x.t) : -1;
+      d.meals.sort((x, y) => tm(x) - tm(y));   // 時刻順に並べる（あとから記録した間食も正しい位置に）
     });
   }
   $('todo').onclick = e => {
@@ -1401,12 +1404,24 @@
     else { const s = slotsOf(windowOf(new Date())).find(x => x.id === id); logMeal(id, suggest(s.cat)); }
   };
   // ---- ほかのメニューから選ぶ ----
-  let pCat = null, pSlot = null;
-  function openPick(cat, slot){ pCat = cat; pSlot = slot; renderPick(); $('dlgPick').showModal(); }
+  let pCat = null, pSlot = null, pSnack = false;
+  function openPick(cat, slot, snack = false){
+    pCat = cat; pSlot = slot; pSnack = snack; renderPick(); $('dlgPick').showModal();
+    if (snack && document.activeElement) document.activeElement.blur();   // スマホで時刻ピッカーが勝手に開かないように
+  }
   function renderPick(){
-    const M = menus(), cur = suggest(pCat), labels = {first:'最初の一食', lunch:'昼食', dinner:'夕食', snack:'間食'};
+    const M = menus(), cur = pSnack ? null : suggest(pCat), labels = {first:'最初の一食', lunch:'昼食', dinner:'夕食', snack:'間食'};
     const order = [pCat, ...['first','lunch','dinner','snack'].filter(k => k !== pCat)], seen = new Set();
-    let h = `<h3 style="margin:0 0 4px">${esc(slotName(pSlot) || labels[pCat])}のメニューを選ぶ</h3>
+    let h;
+    if (pSnack){
+      const fasting = phaseNow().kind === 'fast';
+      h = `<h3 style="margin:0 0 4px">🍪 間食を記録</h3>
+        <p class="sub" style="margin:0">食べたものをタップするとそのまま記録されます（栄養つきのものは「今日の栄養」に反映）</p>
+        <label>食べた時刻</label><input id="pickTime" type="time" value="${nowHM()}">`
+        + (fasting ? `<p class="sub" style="margin:8px 0 0">🔵 いまはファスティング中です。食べた場合も正直に記録すればOK。「からだの中」はこの時刻から数え直します。</p>` : '')
+        + `<div class="pickgrp">一覧にないもの</div>
+        <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：せんべい2枚" style="flex:1"><button id="pickFreeOk">記録</button></div>`;
+    } else h = `<h3 style="margin:0 0 4px">${esc(slotName(pSlot) || labels[pCat])}のメニューを選ぶ</h3>
       <p class="sub" style="margin:0">タップで今日のメニューに設定（ほかの時間帯の定番からも選べます）</p>`;
     order.forEach(k => {
       const items = (M[k] || []).filter(x => !seen.has(x)); items.forEach(x => seen.add(x));
@@ -1417,12 +1432,16 @@
           <div class="s">${r ? `糖質${r.n[0]}g・タンパク質${r.n[1]}g・脂質${r.n[2]}g・${r.n[3]}kcal` : '栄養データなし'}</div></li>`;
       }).join('') + '</ul>';
     });
-    h += `<div class="pickgrp">一覧にないもの</div>
-      <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：豚キムチ炒め" style="flex:1"><button id="pickFreeOk">決定</button></div>
-      <div class="row" style="justify-content:flex-end;margin-top:14px"><button id="pickClose">閉じる</button></div>`;
+    if (!pSnack) h += `<div class="pickgrp">一覧にないもの</div>
+      <div class="row" style="margin-top:6px"><input id="pickFree" placeholder="例：豚キムチ炒め" style="flex:1"><button id="pickFreeOk">決定</button></div>`;
+    h += `<div class="row" style="justify-content:flex-end;margin-top:14px"><button id="pickClose">閉じる</button></div>`;
     $('pickBody').innerHTML = h;
   }
   function setPick(name){
+    if (pSnack){
+      const t = ($('pickTime') && $('pickTime').value) || nowHM();
+      $('dlgPick').close(); return logMeal('snack', name, t);
+    }
     const d = day(todayKey()); d.pick = Object.assign({}, d.pick, {[pCat]: name});
     save(); $('dlgPick').close(); renderHome(); toast(`「${name}」にしました`);
   }
@@ -1474,6 +1493,7 @@
     save(); toast('メニューを保存しました'); renderHome();
   };
   $('btnMenuReset').onclick = () => { if (S.settings.menus) delete S.settings.menus[diet()]; save(); renderAll(); toast('初期のメニューに戻しました'); };
+  $('btnSnack').onclick = () => openPick('snack', 'snack', true);
   $('btnWater').onclick = () => withUndo('💧 水分を記録しました', d => { d.water = (d.water||0)+1; });
   document.querySelectorAll('#conds button').forEach(b => b.onclick = () => {
     const cur = peek(todayKey()).cond;
